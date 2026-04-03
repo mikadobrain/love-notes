@@ -199,21 +199,23 @@ export async function syncConnections(
       .eq('id', otherUserId)
       .single();
 
-    if (!profile || !profile.public_key) continue;
+    if (!profile) continue;
 
     // Check if the other user's public key has changed since our last sync
     const cached = await getConnectionByUserId(otherUserId);
     const keyRotated =
       cached &&
       cached.public_key &&
+      profile.public_key &&
       cached.public_key !== profile.public_key;
 
-    // Update local cache with latest data
+    // Update local cache with latest data (even if public_key is empty –
+    // the contact will be visible; sending is blocked until they have a key)
     await upsertConnectionCache({
       id: conn.id,
       user_id: otherUserId,
       display_name: profile.display_name,
-      public_key: profile.public_key,
+      public_key: profile.public_key ?? '',
       status: conn.status,
       updated_at: conn.updated_at,
     });

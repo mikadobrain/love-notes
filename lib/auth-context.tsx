@@ -139,37 +139,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function ensureKeyPair(userId: string) {
     try {
       const deviceKey = await getPublicKey();
+      console.log('[ensureKeyPair] deviceKey present:', !!deviceKey);
+
+      let keyToUpload: string;
 
       if (!deviceKey) {
-        // Key lost (reinstall / phone swap) → generate new key pair and rotate
-        const newPublicKey = await generateAndStoreKeyPair();
-        await supabase
+        // Key lost (reinstall / phone swap) → generate new key pair
+        keyToUpload = await generateAndStoreKeyPair();
+        console.log('[ensureKeyPair] Generated new key pair');
+      } else {
+        // Check if DB matches device key
+        const { data: profile, error: fetchError } = await supabase
           .from('profiles')
-          .update({ public_key: newPublicKey })
-          .eq('id', userId);
-        console.log('Key pair rotated (device key was missing)');
-        return;
+          .select('public_key')
+          .eq('id', userId)
+          .single();
+
+        if (fetchError) {
+          console.error('[ensureKeyPair] profile fetch error:', fetchError);
+          return;
+        }
+        if (!profile) return;
+
+        if (profile.public_key && profile.public_key === deviceKey) {
+          console.log('[ensureKeyPair] Key already in sync, nothing to do');
+          return; // already in sync
+        }
+        keyToUpload = deviceKey;
+        console.log('[ensureKeyPair] DB key out of sync, uploading device key');
       }
 
-      // Check if DB key matches device key (covers the case where DB has a stale key)
-      const { data: profile } = await supabase
+      const { error: updateError } = await supabase
         .from('profiles')
-        .select('public_key')
-        .eq('id', userId)
-        .single();
+        .update({ public_key: keyToUpload })
+        .eq('id', userId);
 
-      if (!profile) return;
-
-      if (!profile.public_key || profile.public_key !== deviceKey) {
-        // DB is out of sync → update with device key
-        await supabase
-          .from('profiles')
-          .update({ public_key: deviceKey })
-          .eq('id', userId);
-        console.log('Public key synced to DB');
+      if (updateError) {
+        console.error('[ensureKeyPair] UPDATE failed:', JSON.stringify(updateError));
+      } else {
+        console.log('[ensureKeyPair] Public key uploaded successfully');
       }
     } catch (e) {
-      console.error('ensureKeyPair error:', e);
+      console.error('[ensureKeyPair] unexpected error:', e);
     }
   }
 
