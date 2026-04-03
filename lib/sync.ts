@@ -8,6 +8,7 @@ import {
   markNotesUnsyncedForRecipient,
 } from './db';
 import { encryptNotePayload } from './crypto';
+import { Logger } from './logger';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -22,29 +23,44 @@ export async function sendNote(
 ): Promise<{ success: boolean; error?: string }> {
   const keyPair = await getKeyPair();
   if (!keyPair) {
+    Logger.error('sync', 'sendNote: no key pair found');
     return { success: false, error: 'Schlüsselpaar nicht gefunden. Bitte erneut anmelden.' };
   }
 
-  // Encrypt the note payload with authenticated encryption
-  const encryptedPayload = encryptNotePayload(
-    message,
-    senderName,
-    recipientPublicKey,
-    keyPair.secretKey
-  );
+  let encryptedPayload: string;
+  try {
+    encryptedPayload = encryptNotePayload(message, senderName, recipientPublicKey, keyPair.secretKey);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    Logger.error('sync', 'sendNote: encryption failed', { detail, recipientId });
+    return { success: false, error: `Verschlüsselung fehlgeschlagen: ${detail}` };
+  }
 
-  // Send via Edge Function (not directly to DB!)
+  Logger.debug('sync', 'sendNote: invoking Edge Function', { recipientId });
+
   const { data, error } = await supabase.functions.invoke('send-note', {
-    body: {
-      recipient_id: recipientId,
-      encrypted_payload: encryptedPayload,
-    },
+    body: { recipient_id: recipientId, encrypted_payload: encryptedPayload },
   });
 
   if (error) {
-    return { success: false, error: error.message };
+    // Extract the real response body from FunctionsHttpError
+    let detail = error.message;
+    try {
+      // supabase-js wraps the response; try to read the JSON body
+      const ctx = (error as { context?: Response }).context;
+      if (ctx) {
+        const text = await ctx.text();
+        const parsed = JSON.parse(text);
+        detail = parsed.error ?? parsed.message ?? text;
+      }
+    } catch {
+      // ignore parse errors, use original message
+    }
+    Logger.error('sync', 'sendNote: Edge Function error', { detail, recipientId });
+    return { success: false, error: detail };
   }
 
+  Logger.info('sync', 'sendNote: success', { recipientId, messageId: data?.message_id });
   return { success: true };
 }
 
@@ -54,32 +70,30 @@ export async function sendNote(
  */
 export async function fetchAndProcessMessages(): Promise<number> {
   const keyPair = await getKeyPair();
-  if (!keyPair) return 0;
+  if (!keyPair) {
+    Logger.warn('sync', 'fetchAndProcessMessages: no key pair, skipping');
+    return 0;
+  }
 
-  // Fetch undelivered messages
   const { data: messages, error } = await supabase
     .from('message_queue')
     .select('*')
     .eq('delivered', false)
     .order('created_at', { ascending: true });
 
-  if (error || !messages) {
-    console.error('Error fetching messages:', error);
+  if (error) {
+    Logger.error('sync', 'fetchAndProcessMessages: fetch failed', { error: error.message });
     return 0;
   }
 
+  const queue = (messages ?? []) as MessageQueueItem[];
+  Logger.debug('sync', `fetchAndProcessMessages: ${queue.length} message(s) in queue`);
+
   let processedCount = 0;
 
-  for (const msg of messages as MessageQueueItem[]) {
+  for (const msg of queue) {
     try {
-      // We need the sender's public key to decrypt.
-      // The sender_id is not stored in message_queue for privacy,
-      // so we try each connection's public key until one works.
-      // In practice, we could add sender_id to message_queue (it's not sensitive).
-      const decrypted = await tryDecryptFromConnections(
-        msg.encrypted_payload,
-        keyPair.secretKey
-      );
+      const decrypted = await tryDecryptFromConnections(msg.encrypted_payload, keyPair.secretKey);
 
       if (decrypted) {
         await insertIncomingNote({
@@ -88,20 +102,21 @@ export async function fetchAndProcessMessages(): Promise<number> {
           message: decrypted.message,
           received_at: new Date().toISOString(),
         });
-
-        // Mark as delivered and delete from queue
-        await supabase
-          .from('message_queue')
-          .delete()
-          .eq('id', msg.id);
-
+        await supabase.from('message_queue').delete().eq('id', msg.id);
         processedCount++;
+        Logger.debug('sync', 'fetchAndProcessMessages: message processed', { id: msg.id });
+      } else {
+        Logger.warn('sync', 'fetchAndProcessMessages: could not decrypt message', { id: msg.id });
       }
     } catch (err) {
-      console.error('Error processing message:', msg.id, err);
+      Logger.error('sync', 'fetchAndProcessMessages: error processing message', {
+        id: msg.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
+  Logger.info('sync', `fetchAndProcessMessages: processed ${processedCount} message(s)`);
   return processedCount;
 }
 
@@ -189,10 +204,11 @@ export async function syncConnections(
     .or(`requester_id.eq.${currentUserId},target_id.eq.${currentUserId}`)
     .eq('status', 'accepted');
 
-  if (error || !connections) {
-    console.error('Error syncing connections:', error);
+  if (error) {
+    Logger.error('sync', 'syncConnections: fetch failed', { error: error.message });
     return;
   }
+  if (!connections) return;
 
   for (const conn of connections) {
     const otherUserId = conn.requester_id === currentUserId
@@ -229,10 +245,14 @@ export async function syncConnections(
     // Key rotation detected → mark all notes as unsynced so the existing
     // sync mechanism re-encrypts and re-delivers them with the new key
     if (keyRotated) {
-      console.log(`Key rotation detected for ${profile.display_name} – queuing re-send`);
+      Logger.warn('sync', `syncConnections: key rotation detected for ${profile.display_name}`, {
+        userId: otherUserId,
+      });
       await markNotesUnsyncedForRecipient(otherUserId);
     }
   }
+
+  Logger.debug('sync', `syncConnections: synced ${connections.length} connection(s)`);
 
   // Re-send any notes that were marked unsynced (covers key rotation and offline cases)
   await syncOutgoingNotes(senderDisplayName ?? null);

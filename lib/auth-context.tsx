@@ -3,6 +3,7 @@ import { Session, User } from '@supabase/supabase-js';
 import * as Crypto from 'expo-crypto';
 import { supabase, Profile } from './supabase';
 import { generateAndStoreKeyPair, getPublicKey } from './crypto';
+import { Logger } from './logger';
 
 type AuthContextType = {
   session: Session | null;
@@ -52,6 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function fetchProfile(userId: string) {
     try {
+      Logger.setUser(userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -59,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching profile:', error);
+        Logger.error('auth', 'fetchProfile failed', { error: error.message, code: error.code });
       }
       setProfile(data as Profile | null);
 
@@ -185,6 +187,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut() {
+    Logger.info('auth', 'User signed out');
+    Logger.setUser(null);
     await supabase.auth.signOut();
     setProfile(null);
     setSession(null);
