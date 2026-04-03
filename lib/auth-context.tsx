@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
+import * as Crypto from 'expo-crypto';
 import { supabase, Profile } from './supabase';
 import { generateAndStoreKeyPair, getPublicKey } from './crypto';
 
@@ -61,6 +62,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error('Error fetching profile:', error);
       }
       setProfile(data as Profile | null);
+
+      // Always verify key pair is present and in sync on every login
+      if (data) {
+        ensureKeyPair(userId);
+      }
     } catch (err) {
       console.error('Error fetching profile:', err);
     } finally {
@@ -80,28 +86,91 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signUpWithEmail(email: string, password: string, displayName: string) {
-    // 1. Create auth user
-    const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+    // 1. Create auth user – a DB trigger auto-creates the profile row
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { display_name: displayName } },
+    });
     if (signUpError) return { error: new Error(signUpError.message) };
     if (!data.user) return { error: new Error('Registrierung fehlgeschlagen') };
 
-    // 2. Generate E2E key pair and store locally
+    // 2. Generate E2E key pair and store on device
     const publicKey = await generateAndStoreKeyPair();
 
-    // 3. Create profile with public key
-    const { error: profileError } = await supabase.from('profiles').insert({
-      id: data.user.id,
-      display_name: displayName,
-      public_key: publicKey,
-      email_hash: null, // Will be set via Edge Function for privacy
-    });
+    // 3. Hash email for searchability
+    const emailHash = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      email.trim().toLowerCase()
+    );
 
-    if (profileError) {
-      console.error('Profile creation error:', profileError);
-      return { error: new Error('Profil konnte nicht erstellt werden: ' + profileError.message) };
+    // 4. Update the profile (trigger created it) with display_name + public key
+    // Retry a couple of times in case the trigger hasn't committed yet
+    let updateError = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { error } = await supabase.from('profiles').update({
+        display_name: displayName,
+        public_key: publicKey,
+        email_hash: emailHash,
+      }).eq('id', data.user.id);
+      if (!error) { updateError = null; break; }
+      updateError = error;
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    if (updateError) {
+      console.error('Profile update error:', updateError);
+      // Non-fatal: user can still log in, key will be uploaded on next login
     }
 
     return { error: null };
+  }
+
+  /**
+   * Ensures the device has a valid E2E key pair and that the public key
+   * in the database matches the device's key.
+   *
+   * Handles three cases:
+   * 1. First install / fresh signup → generates key, uploads it
+   * 2. Reinstall / phone swap → device has no key → generates new key, rotates in DB
+   *    (old messages become unreadable – this is unavoidable without cloud key backup)
+   * 3. Normal login → device key matches DB → no-op
+   */
+  async function ensureKeyPair(userId: string) {
+    try {
+      const deviceKey = await getPublicKey();
+
+      if (!deviceKey) {
+        // Key lost (reinstall / phone swap) → generate new key pair and rotate
+        const newPublicKey = await generateAndStoreKeyPair();
+        await supabase
+          .from('profiles')
+          .update({ public_key: newPublicKey })
+          .eq('id', userId);
+        console.log('Key pair rotated (device key was missing)');
+        return;
+      }
+
+      // Check if DB key matches device key (covers the case where DB has a stale key)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('public_key')
+        .eq('id', userId)
+        .single();
+
+      if (!profile) return;
+
+      if (!profile.public_key || profile.public_key !== deviceKey) {
+        // DB is out of sync → update with device key
+        await supabase
+          .from('profiles')
+          .update({ public_key: deviceKey })
+          .eq('id', userId);
+        console.log('Public key synced to DB');
+      }
+    } catch (e) {
+      console.error('ensureKeyPair error:', e);
+    }
   }
 
   async function signOut() {

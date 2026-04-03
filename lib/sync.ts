@@ -5,6 +5,7 @@ import {
   getUnsyncedOutgoingNotes,
   markOutgoingNoteSynced,
   getConnectionByUserId,
+  markNotesUnsyncedForRecipient,
 } from './db';
 import { encryptNotePayload } from './crypto';
 import { v4 as uuidv4 } from 'uuid';
@@ -135,20 +136,22 @@ async function tryDecryptFromConnections(
 
 /**
  * Sync unsynced outgoing notes to the server.
- * Called periodically or when the app comes to foreground.
+ * Uses the connection's current public key from local cache,
+ * so this automatically handles key-rotated recipients correctly.
  */
-export async function syncOutgoingNotes(): Promise<void> {
+export async function syncOutgoingNotes(senderDisplayName?: string | null): Promise<void> {
   const unsyncedNotes = await getUnsyncedOutgoingNotes();
 
   for (const note of unsyncedNotes) {
     const conn = await getConnectionByUserId(note.recipient_id);
     if (!conn) continue;
 
+    const senderName = note.is_anonymous ? null : (senderDisplayName ?? null);
     const result = await sendNote(
       note.recipient_id,
       conn.public_key,
       note.message,
-      note.is_anonymous ? null : 'pending' // Will be replaced with actual name
+      senderName
     );
 
     if (result.success) {
@@ -159,20 +162,24 @@ export async function syncOutgoingNotes(): Promise<void> {
 
 /**
  * Sync connections from Supabase to local cache.
+ *
+ * If a connection's public key has changed (e.g. recipient reinstalled the app),
+ * all outgoing notes for that recipient are automatically re-encrypted and re-sent
+ * using the new key, so the recipient regains access to all notes.
+ *
+ * @param currentUserId - The logged-in user's ID
+ * @param senderDisplayName - The logged-in user's display name (for non-anonymous re-sends)
  */
-export async function syncConnections(currentUserId: string): Promise<void> {
-  const { upsertConnectionCache } = await import('./db');
+export async function syncConnections(
+  currentUserId: string,
+  senderDisplayName?: string
+): Promise<void> {
+  const { upsertConnectionCache, getConnectionByUserId } = await import('./db');
 
   // Fetch all accepted connections where I'm involved
   const { data: connections, error } = await supabase
     .from('connections')
-    .select(`
-      id,
-      requester_id,
-      target_id,
-      status,
-      updated_at
-    `)
+    .select('id, requester_id, target_id, status, updated_at')
     .or(`requester_id.eq.${currentUserId},target_id.eq.${currentUserId}`)
     .eq('status', 'accepted');
 
@@ -181,7 +188,6 @@ export async function syncConnections(currentUserId: string): Promise<void> {
     return;
   }
 
-  // For each connection, fetch the other user's profile
   for (const conn of connections) {
     const otherUserId = conn.requester_id === currentUserId
       ? conn.target_id
@@ -193,15 +199,33 @@ export async function syncConnections(currentUserId: string): Promise<void> {
       .eq('id', otherUserId)
       .single();
 
-    if (profile) {
-      await upsertConnectionCache({
-        id: conn.id,
-        user_id: otherUserId,
-        display_name: profile.display_name,
-        public_key: profile.public_key,
-        status: conn.status,
-        updated_at: conn.updated_at,
-      });
+    if (!profile || !profile.public_key) continue;
+
+    // Check if the other user's public key has changed since our last sync
+    const cached = await getConnectionByUserId(otherUserId);
+    const keyRotated =
+      cached &&
+      cached.public_key &&
+      cached.public_key !== profile.public_key;
+
+    // Update local cache with latest data
+    await upsertConnectionCache({
+      id: conn.id,
+      user_id: otherUserId,
+      display_name: profile.display_name,
+      public_key: profile.public_key,
+      status: conn.status,
+      updated_at: conn.updated_at,
+    });
+
+    // Key rotation detected → mark all notes as unsynced so the existing
+    // sync mechanism re-encrypts and re-delivers them with the new key
+    if (keyRotated) {
+      console.log(`Key rotation detected for ${profile.display_name} – queuing re-send`);
+      await markNotesUnsyncedForRecipient(otherUserId);
     }
   }
+
+  // Re-send any notes that were marked unsynced (covers key rotation and offline cases)
+  await syncOutgoingNotes(senderDisplayName ?? null);
 }

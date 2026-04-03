@@ -11,10 +11,11 @@ import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth-context';
 import { getAcceptedConnections, CachedConnection } from '@/lib/db';
 import { syncConnections } from '@/lib/sync';
+
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 export default function ContactsScreen() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const router = useRouter();
   const [connections, setConnections] = useState<CachedConnection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,20 +36,20 @@ export default function ContactsScreen() {
     if (!user) return;
     setIsRefreshing(true);
     try {
-      await syncConnections(user.id);
+      await syncConnections(user.id, profile?.display_name);
       await loadConnections();
     } finally {
       setIsRefreshing(false);
     }
-  }, [user, loadConnections]);
+  }, [user, profile, loadConnections]);
 
   useEffect(() => {
     loadConnections();
     // Also sync from server on mount
     if (user) {
-      syncConnections(user.id).then(loadConnections);
+      syncConnections(user.id, profile?.display_name).then(loadConnections);
     }
-  }, [user]);
+  }, [user, profile]);
 
   if (isLoading) {
     return (

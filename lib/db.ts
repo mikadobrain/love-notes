@@ -129,6 +129,19 @@ export async function deleteOutgoingNote(noteId: string): Promise<void> {
   await database.runAsync('DELETE FROM outgoing_notes WHERE id = ?', [noteId]);
 }
 
+/**
+ * Mark all outgoing notes for a recipient as unsynced.
+ * Used when the recipient's public key has rotated (e.g. reinstall),
+ * so the existing sync mechanism re-encrypts and re-sends them with the new key.
+ */
+export async function markNotesUnsyncedForRecipient(recipientId: string): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync(
+    'UPDATE outgoing_notes SET synced = 0 WHERE recipient_id = ?',
+    [recipientId]
+  );
+}
+
 // ============================================
 // Incoming Notes (notes others wrote for me)
 // ============================================
