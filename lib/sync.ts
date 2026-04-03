@@ -21,63 +21,50 @@ export async function sendNote(
   message: string,
   senderName: string | null // null = anonymous
 ): Promise<{ success: boolean; error?: string }> {
+  console.log('[sendNote] START');
+
+  console.log('[sendNote] getting key pair...');
   const keyPair = await getKeyPair();
+  console.log('[sendNote] key pair result:', !!keyPair);
   if (!keyPair) {
     Logger.error('sync', 'sendNote: no key pair found');
     return { success: false, error: 'Schlüsselpaar nicht gefunden. Bitte erneut anmelden.' };
   }
 
-  // Get the current session and pass the access token explicitly.
-  // We cannot rely on the client's internal FunctionsClient headers because
-  // they may not yet reflect the session that was just loaded from SecureStore
-  // (race condition on app startup), leading to "Invalid JWT" from the server.
+  console.log('[sendNote] getting session...');
   const { data: { session } } = await supabase.auth.getSession();
+  console.log('[sendNote] session result:', !!session, 'token:', session?.access_token?.substring(0, 20));
   if (!session?.access_token) {
     Logger.warn('sync', 'sendNote: no active session, deferring send');
     return { success: false, error: 'no_session' };
   }
 
-  // Force a token refresh to ensure we have a valid, non-expired JWT.
-  // The user JWT expires after 1 hour; if the silent auto-refresh hasn't
-  // happened yet (e.g. on first sync after startup), the gateway rejects with 401.
-  let accessToken = session.access_token;
-  try {
-    const { data: { session: freshSession } } = await supabase.auth.refreshSession();
-    if (freshSession?.access_token) {
-      accessToken = freshSession.access_token;
-      Logger.debug('sync', 'sendNote: token refreshed', {
-        tokenLength: accessToken.length,
-        tokenPrefix: accessToken.substring(0, 20),
-      });
-    } else {
-      Logger.warn('sync', 'sendNote: refreshSession returned no session, using existing token');
-    }
-  } catch (refreshErr) {
-    Logger.warn('sync', 'sendNote: token refresh failed, using existing token', {
-      error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
-    });
-  }
+  const accessToken = session.access_token;
 
+  console.log('[sendNote] encrypting...');
   let encryptedPayload: string;
   try {
     encryptedPayload = encryptNotePayload(message, senderName, recipientPublicKey, keyPair.secretKey);
+    console.log('[sendNote] encryption OK, payload length:', encryptedPayload.length);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     Logger.error('sync', 'sendNote: encryption failed', { detail, recipientId });
+    console.log('[sendNote] encryption FAILED:', detail);
     return { success: false, error: `Verschlüsselung fehlgeschlagen: ${detail}` };
   }
 
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
   const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+  console.log('[sendNote] supabaseUrl:', supabaseUrl ? 'set' : 'MISSING', 'anonKey:', supabaseAnonKey ? 'set' : 'MISSING');
 
-  Logger.debug('sync', 'sendNote: calling Edge Function', {
-    recipientId,
-    tokenLength: accessToken.length,
-    tokenPrefix: accessToken.substring(0, 20),
-  });
+  Logger.debug('sync', 'sendNote: calling Edge Function', { recipientId });
+  console.log('[sendNote] calling fetch...');
 
   // Use fetch directly to avoid any supabase-js FunctionsClient header issues.
   // Both Authorization (user JWT) and apikey (anon key) headers are required.
+  // AbortController gives us a 15-second hard timeout so the UI never hangs.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
   let response: Response;
   try {
     response = await fetch(`${supabaseUrl}/functions/v1/send-note`, {
@@ -88,13 +75,19 @@ export async function sendNote(
         'apikey': supabaseAnonKey,
       },
       body: JSON.stringify({ recipient_id: recipientId, encrypted_payload: encryptedPayload }),
+      signal: controller.signal,
     });
   } catch (fetchErr) {
     const detail = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
-    Logger.error('sync', 'sendNote: network error', { detail, recipientId });
-    return { success: false, error: `Netzwerkfehler: ${detail}` };
+    const isTimeout = fetchErr instanceof Error && fetchErr.name === 'AbortError';
+    console.log('[sendNote] fetch ERROR:', detail, 'timeout?', isTimeout);
+    Logger.error('sync', isTimeout ? 'sendNote: request timed out' : 'sendNote: network error', { detail, recipientId });
+    return { success: false, error: isTimeout ? 'Zeitüberschreitung – bitte erneut versuchen.' : `Netzwerkfehler: ${detail}` };
+  } finally {
+    clearTimeout(timeoutId);
   }
 
+  console.log('[sendNote] fetch response status:', response.status);
   let responseBody: { success?: boolean; message_id?: string; error?: string } = {};
   try {
     responseBody = await response.json();
@@ -104,6 +97,7 @@ export async function sendNote(
 
   if (!response.ok) {
     const detail = responseBody.error ?? `HTTP ${response.status}`;
+    console.log('[sendNote] Edge Function error:', detail);
     Logger.error('sync', 'sendNote: Edge Function error', {
       status: response.status,
       detail,
@@ -112,6 +106,7 @@ export async function sendNote(
     return { success: false, error: detail };
   }
 
+  console.log('[sendNote] SUCCESS', responseBody.message_id);
   Logger.info('sync', 'sendNote: success', { recipientId, messageId: responseBody.message_id });
   return { success: true };
 }
