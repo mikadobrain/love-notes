@@ -18,6 +18,7 @@ import {
   getOutgoingNotesForRecipient,
   insertOutgoingNote,
   deleteOutgoingNote,
+  markOutgoingNoteSynced,
   getConnectionByUserId,
   OutgoingNote,
   CachedConnection,
@@ -122,6 +123,7 @@ export default function ContactDetailScreen() {
       );
 
       if (result.success) {
+        await markOutgoingNoteSynced(noteId);
         Logger.info('contact', 'handleSend: success', {
           noteId,
           recipientId: id,
