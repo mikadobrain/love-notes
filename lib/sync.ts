@@ -27,11 +27,12 @@ export async function sendNote(
     return { success: false, error: 'Schlüsselpaar nicht gefunden. Bitte erneut anmelden.' };
   }
 
-  // Verify there is an active user session before hitting the Edge Function.
-  // syncOutgoingNotes can run on app start before the JWT is fully loaded
-  // from SecureStore, which would result in "Invalid JWT" from the server.
+  // Get the current session and pass the access token explicitly.
+  // We cannot rely on the client's internal FunctionsClient headers because
+  // they may not yet reflect the session that was just loaded from SecureStore
+  // (race condition on app startup), leading to "Invalid JWT" from the server.
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
+  if (!session?.access_token) {
     Logger.warn('sync', 'sendNote: no active session, deferring send');
     return { success: false, error: 'no_session' };
   }
@@ -49,6 +50,9 @@ export async function sendNote(
 
   const { data, error } = await supabase.functions.invoke('send-note', {
     body: { recipient_id: recipientId, encrypted_payload: encryptedPayload },
+    // Pass token explicitly – avoids race condition where FunctionsClient
+    // headers haven't yet been updated after session load from SecureStore
+    headers: { Authorization: `Bearer ${session.access_token}` },
   });
 
   if (error) {
