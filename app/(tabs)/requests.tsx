@@ -15,6 +15,7 @@ import * as Crypto from 'expo-crypto';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth-context';
 import { supabase, Connection } from '@/lib/supabase';
+import { Logger } from '@/lib/logger';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 type ConnectionRequest = Connection & {
@@ -34,7 +35,6 @@ export default function RequestsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Find-user search state
   const [searchEmail, setSearchEmail] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [foundProfile, setFoundProfile] = useState<FoundProfile | null>(null);
@@ -43,68 +43,92 @@ export default function RequestsScreen() {
 
   const loadRequests = useCallback(async () => {
     if (!user) return;
+    Logger.debug('requests', 'loadRequests: fetching from Supabase...', { userId: user.id });
     try {
-      const { data: incomingData } = await supabase
+      const { data: incomingData, error: inErr } = await supabase
         .from('connections')
         .select('*, requester_profile:profiles!connections_requester_id_fkey(display_name)')
         .eq('target_id', user.id)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
-      const { data: outgoingData } = await supabase
+      if (inErr) {
+        Logger.error('requests', 'loadRequests: incoming fetch error', { error: inErr.message });
+      }
+
+      const { data: outgoingData, error: outErr } = await supabase
         .from('connections')
         .select('*, target_profile:profiles!connections_target_id_fkey(display_name)')
         .eq('requester_id', user.id)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
+      if (outErr) {
+        Logger.error('requests', 'loadRequests: outgoing fetch error', { error: outErr.message });
+      }
+
       setIncoming((incomingData as ConnectionRequest[]) ?? []);
       setOutgoing((outgoingData as ConnectionRequest[]) ?? []);
+      Logger.debug('requests', 'loadRequests: done', {
+        incoming: incomingData?.length ?? 0,
+        outgoing: outgoingData?.length ?? 0,
+      });
     } catch (err) {
-      console.error('Error loading requests:', err);
+      Logger.error('requests', 'loadRequests: unexpected error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setIsLoading(false);
     }
   }, [user]);
 
   const handleRefresh = useCallback(async () => {
+    Logger.debug('requests', 'handleRefresh: triggered');
     setIsRefreshing(true);
     await loadRequests();
     setIsRefreshing(false);
   }, [loadRequests]);
 
   useEffect(() => {
+    Logger.debug('requests', 'RequestsScreen mounted');
     loadRequests();
   }, [loadRequests]);
 
   async function handleAccept(connectionId: string) {
+    Logger.info('requests', 'handleAccept', { connectionId });
     const { error } = await supabase
       .from('connections')
       .update({ status: 'accepted', updated_at: new Date().toISOString() })
       .eq('id', connectionId);
 
     if (error) {
+      Logger.error('requests', 'handleAccept: failed', { error: error.message, connectionId });
       Alert.alert('Fehler', 'Verbindungsanfrage konnte nicht angenommen werden.');
     } else {
+      Logger.info('requests', 'handleAccept: accepted', { connectionId });
       await loadRequests();
     }
   }
 
   async function handleReject(connectionId: string) {
+    Logger.info('requests', 'handleReject: confirm dialog shown', { connectionId });
     Alert.alert('Anfrage ablehnen', 'Möchtest du diese Anfrage wirklich ablehnen?', [
       { text: 'Abbrechen', style: 'cancel' },
       {
         text: 'Ablehnen',
         style: 'destructive',
         onPress: async () => {
+          Logger.info('requests', 'handleReject: confirmed', { connectionId });
           const { error } = await supabase
             .from('connections')
             .update({ status: 'rejected', updated_at: new Date().toISOString() })
             .eq('id', connectionId);
 
           if (error) {
+            Logger.error('requests', 'handleReject: failed', { error: error.message, connectionId });
             Alert.alert('Fehler', 'Anfrage konnte nicht abgelehnt werden.');
           } else {
+            Logger.info('requests', 'handleReject: rejected', { connectionId });
             await loadRequests();
           }
         },
@@ -116,16 +140,17 @@ export default function RequestsScreen() {
     const email = searchEmail.trim().toLowerCase();
     if (!email) return;
 
+    Logger.info('requests', 'handleSearch: searching by email hash', { email });
     setIsSearching(true);
     setFoundProfile(null);
     setSearchError('');
 
     try {
-      // Hash the email the same way as registration
       const emailHash = await Crypto.digestStringAsync(
         Crypto.CryptoDigestAlgorithm.SHA256,
         email
       );
+      Logger.debug('requests', 'handleSearch: email hashed, querying profiles...');
 
       const { data, error } = await supabase
         .from('profiles')
@@ -134,23 +159,39 @@ export default function RequestsScreen() {
         .single();
 
       if (error || !data) {
+        Logger.warn('requests', 'handleSearch: no profile found', { error: error?.message });
         setSearchError('Kein Nutzer mit dieser E-Mail gefunden.');
         return;
       }
 
+      Logger.debug('requests', 'handleSearch: profile found', {
+        id: data.id,
+        displayName: data.display_name,
+      });
+
       if (data.id === user?.id) {
+        Logger.debug('requests', 'handleSearch: user searched for themselves');
         setSearchError('Das bist du selbst 😄');
         return;
       }
 
       // Check if a connection already exists
-      const { data: existing } = await supabase
+      const { data: existing, error: existErr } = await supabase
         .from('connections')
         .select('id, status')
         .or(
           `and(requester_id.eq.${user?.id},target_id.eq.${data.id}),and(requester_id.eq.${data.id},target_id.eq.${user?.id})`
         )
         .maybeSingle();
+
+      if (existErr) {
+        Logger.warn('requests', 'handleSearch: existing connection check error', { error: existErr.message });
+      }
+
+      Logger.debug('requests', 'handleSearch: existing connection check', {
+        exists: !!existing,
+        status: existing?.status,
+      });
 
       if (existing) {
         if (existing.status === 'accepted') {
@@ -164,8 +205,11 @@ export default function RequestsScreen() {
       }
 
       setFoundProfile(data);
+      Logger.info('requests', 'handleSearch: profile ready to connect', { displayName: data.display_name });
     } catch (e) {
-      console.error('Search error:', e);
+      Logger.error('requests', 'handleSearch: unexpected error', {
+        error: e instanceof Error ? e.message : String(e),
+      });
       setSearchError('Fehler bei der Suche. Bitte versuche es erneut.');
     } finally {
       setIsSearching(false);
@@ -175,6 +219,10 @@ export default function RequestsScreen() {
   async function handleSendRequest() {
     if (!foundProfile || !user) return;
 
+    Logger.info('requests', 'handleSendRequest: sending connection request', {
+      targetId: foundProfile.id,
+      targetName: foundProfile.display_name,
+    });
     setIsSendingRequest(true);
     try {
       const { error } = await supabase.from('connections').insert({
@@ -184,14 +232,26 @@ export default function RequestsScreen() {
       });
 
       if (error) {
+        Logger.error('requests', 'handleSendRequest: failed', {
+          error: error.message,
+          code: error.code,
+          targetId: foundProfile.id,
+        });
         Alert.alert('Fehler', 'Anfrage konnte nicht gesendet werden: ' + error.message);
       } else {
+        Logger.info('requests', 'handleSendRequest: success', {
+          targetId: foundProfile.id,
+          targetName: foundProfile.display_name,
+        });
         Alert.alert('Gesendet! ✉️', `Verbindungsanfrage an ${foundProfile.display_name} wurde gesendet.`);
         setFoundProfile(null);
         setSearchEmail('');
         await loadRequests();
       }
     } catch (e) {
+      Logger.error('requests', 'handleSendRequest: unexpected error', {
+        error: e instanceof Error ? e.message : String(e),
+      });
       Alert.alert('Fehler', 'Unbekannter Fehler. Bitte versuche es erneut.');
     } finally {
       setIsSendingRequest(false);
@@ -370,7 +430,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  // Search card
   searchCard: {
     backgroundColor: '#f9f9f9',
     borderRadius: 12,
@@ -449,7 +508,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Request items
   requestItem: {
     flexDirection: 'row',
     alignItems: 'center',

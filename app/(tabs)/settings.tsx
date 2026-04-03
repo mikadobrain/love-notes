@@ -4,12 +4,14 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  Switch,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth-context';
 import { getSetting, setSetting } from '@/lib/db';
 import { scheduleRandomNoteNotification } from '@/lib/notifications';
+import { Logger } from '@/lib/logger';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
@@ -17,6 +19,7 @@ export default function SettingsScreen() {
   const { user, profile, signOut } = useAuth();
   const insets = useSafeAreaInsets();
   const [intervalHours, setIntervalHours] = useState(8);
+  const [debugMode, setDebugMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -24,20 +27,49 @@ export default function SettingsScreen() {
   }, []);
 
   async function loadSettings() {
+    Logger.debug('settings', 'loadSettings: loading...');
     const interval = await getSetting('notification_interval_hours');
     if (interval) setIntervalHours(parseInt(interval, 10));
+
+    const debug = await getSetting('debug_mode');
+    const debugEnabled = debug === '1';
+    setDebugMode(debugEnabled);
+    // Apply immediately so the current session already uses the stored preference
+    Logger.setDebugMode(debugEnabled);
+    Logger.debug('settings', 'loadSettings: done', { intervalHours: interval, debugMode: debugEnabled });
   }
 
   async function handleIntervalChange(value: number) {
     const rounded = Math.round(value);
+    Logger.debug('settings', 'handleIntervalChange', { rounded });
     setIntervalHours(rounded);
     setIsSaving(true);
     await setSetting('notification_interval_hours', rounded.toString());
     await scheduleRandomNoteNotification();
     setIsSaving(false);
+    Logger.info('settings', 'notification interval updated', { intervalHours: rounded });
+  }
+
+  async function handleDebugModeToggle(value: boolean) {
+    Logger.info('settings', `debug mode toggle → ${value}`);
+    setDebugMode(value);
+    await setSetting('debug_mode', value ? '1' : '0');
+    Logger.setDebugMode(value);
+    // Confirm in a log entry that is always sent (info is printed at debug-mode level)
+    Logger.info('settings', `Debug mode is now ${value ? 'ON' : 'OFF'}`, {
+      userId: user?.id,
+      displayName: profile?.display_name,
+    });
+    if (value) {
+      Alert.alert(
+        'Debug-Modus aktiviert',
+        'Alle Aktionen werden jetzt ausführlich geloggt – in der Konsole und in Supabase (app_logs).'
+      );
+    }
   }
 
   async function handleSignOut() {
+    Logger.info('settings', 'sign out button tapped');
     Alert.alert('Abmelden', 'Möchtest du dich wirklich abmelden?', [
       { text: 'Abbrechen', style: 'cancel' },
       {
@@ -92,6 +124,33 @@ export default function SettingsScreen() {
             <Text style={styles.sliderLabel}>12h</Text>
             <Text style={styles.sliderLabel}>24h</Text>
           </View>
+        </View>
+      </View>
+
+      {/* Debug Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Entwickler</Text>
+        <View style={styles.settingCard}>
+          <View style={styles.debugRow}>
+            <View style={styles.debugTextGroup}>
+              <Text style={styles.settingLabel}>Debug-Modus</Text>
+              <Text style={styles.settingDescription}>
+                Alle Aktionen werden ausführlich in der Konsole und in Supabase (app_logs) geloggt.
+              </Text>
+            </View>
+            <Switch
+              value={debugMode}
+              onValueChange={handleDebugModeToggle}
+              trackColor={{ false: '#ddd', true: '#e74c8b' }}
+              thumbColor="#fff"
+            />
+          </View>
+          {debugMode && (
+            <View style={styles.debugActiveBadge}>
+              <FontAwesome name="bug" size={12} color="#e74c8b" />
+              <Text style={styles.debugActiveText}>Debug-Logging aktiv</Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -194,6 +253,35 @@ const styles = StyleSheet.create({
   sliderLabel: {
     fontSize: 12,
     color: '#999',
+  },
+  debugRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    backgroundColor: 'transparent',
+    gap: 12,
+  },
+  debugTextGroup: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  debugActiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: '#fff0f5',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#f0c0d8',
+  },
+  debugActiveText: {
+    fontSize: 12,
+    color: '#e74c8b',
+    fontWeight: '600',
   },
   infoText: {
     fontSize: 14,

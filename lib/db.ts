@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { Logger } from './logger';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -7,8 +8,10 @@ let db: SQLite.SQLiteDatabase | null = null;
  */
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db;
+  Logger.debug('db', 'Opening SQLite database...');
   db = await SQLite.openDatabaseAsync('lovenotes.db');
   await initializeDatabase(db);
+  Logger.debug('db', 'Database ready');
   return db;
 }
 
@@ -16,6 +19,7 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
  * Create all local tables if they don't exist.
  */
 async function initializeDatabase(database: SQLite.SQLiteDatabase): Promise<void> {
+  Logger.debug('db', 'Running schema migrations...');
   await database.execAsync(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
@@ -54,7 +58,9 @@ async function initializeDatabase(database: SQLite.SQLiteDatabase): Promise<void
 
     -- Default settings
     INSERT OR IGNORE INTO settings (key, value) VALUES ('notification_interval_hours', '8');
+    INSERT OR IGNORE INTO settings (key, value) VALUES ('debug_mode', '0');
   `);
+  Logger.debug('db', 'Schema migrations complete');
 }
 
 // ============================================
@@ -72,15 +78,18 @@ export type OutgoingNote = {
 };
 
 export async function insertOutgoingNote(note: Omit<OutgoingNote, 'synced'>): Promise<void> {
+  Logger.debug('db', 'insertOutgoingNote', { id: note.id, recipient: note.recipient_name });
   const database = await getDatabase();
   await database.runAsync(
     `INSERT INTO outgoing_notes (id, recipient_id, recipient_name, message, is_anonymous, created_at, synced)
      VALUES (?, ?, ?, ?, ?, ?, 0)`,
     [note.id, note.recipient_id, note.recipient_name, note.message, note.is_anonymous ? 1 : 0, note.created_at]
   );
+  Logger.debug('db', 'insertOutgoingNote: done', { id: note.id });
 }
 
 export async function getOutgoingNotesForRecipient(recipientId: string): Promise<OutgoingNote[]> {
+  Logger.debug('db', 'getOutgoingNotesForRecipient', { recipientId });
   const database = await getDatabase();
   const rows = await database.getAllAsync<{
     id: string;
@@ -94,6 +103,7 @@ export async function getOutgoingNotesForRecipient(recipientId: string): Promise
     'SELECT * FROM outgoing_notes WHERE recipient_id = ? ORDER BY created_at DESC',
     [recipientId]
   );
+  Logger.debug('db', 'getOutgoingNotesForRecipient: result', { count: rows.length });
   return rows.map((r) => ({
     ...r,
     is_anonymous: r.is_anonymous === 1,
@@ -102,11 +112,13 @@ export async function getOutgoingNotesForRecipient(recipientId: string): Promise
 }
 
 export async function markOutgoingNoteSynced(noteId: string): Promise<void> {
+  Logger.debug('db', 'markOutgoingNoteSynced', { noteId });
   const database = await getDatabase();
   await database.runAsync('UPDATE outgoing_notes SET synced = 1 WHERE id = ?', [noteId]);
 }
 
 export async function getUnsyncedOutgoingNotes(): Promise<OutgoingNote[]> {
+  Logger.debug('db', 'getUnsyncedOutgoingNotes');
   const database = await getDatabase();
   const rows = await database.getAllAsync<{
     id: string;
@@ -117,6 +129,7 @@ export async function getUnsyncedOutgoingNotes(): Promise<OutgoingNote[]> {
     created_at: string;
     synced: number;
   }>('SELECT * FROM outgoing_notes WHERE synced = 0');
+  Logger.debug('db', 'getUnsyncedOutgoingNotes: result', { count: rows.length });
   return rows.map((r) => ({
     ...r,
     is_anonymous: r.is_anonymous === 1,
@@ -125,8 +138,10 @@ export async function getUnsyncedOutgoingNotes(): Promise<OutgoingNote[]> {
 }
 
 export async function deleteOutgoingNote(noteId: string): Promise<void> {
+  Logger.debug('db', 'deleteOutgoingNote', { noteId });
   const database = await getDatabase();
   await database.runAsync('DELETE FROM outgoing_notes WHERE id = ?', [noteId]);
+  Logger.debug('db', 'deleteOutgoingNote: done');
 }
 
 /**
@@ -135,11 +150,13 @@ export async function deleteOutgoingNote(noteId: string): Promise<void> {
  * so the existing sync mechanism re-encrypts and re-sends them with the new key.
  */
 export async function markNotesUnsyncedForRecipient(recipientId: string): Promise<void> {
+  Logger.debug('db', 'markNotesUnsyncedForRecipient', { recipientId });
   const database = await getDatabase();
   await database.runAsync(
     'UPDATE outgoing_notes SET synced = 0 WHERE recipient_id = ?',
     [recipientId]
   );
+  Logger.debug('db', 'markNotesUnsyncedForRecipient: done');
 }
 
 // ============================================
@@ -155,30 +172,38 @@ export type IncomingNote = {
 };
 
 export async function insertIncomingNote(note: Omit<IncomingNote, 'last_shown_at'>): Promise<void> {
+  Logger.debug('db', 'insertIncomingNote', { id: note.id, sender: note.sender_name ?? 'anon' });
   const database = await getDatabase();
   await database.runAsync(
     `INSERT OR IGNORE INTO incoming_notes (id, sender_name, message, received_at)
      VALUES (?, ?, ?, ?)`,
     [note.id, note.sender_name, note.message, note.received_at]
   );
+  Logger.debug('db', 'insertIncomingNote: done');
 }
 
 export async function getAllIncomingNotes(): Promise<IncomingNote[]> {
+  Logger.debug('db', 'getAllIncomingNotes');
   const database = await getDatabase();
-  return database.getAllAsync<IncomingNote>(
+  const rows = await database.getAllAsync<IncomingNote>(
     'SELECT * FROM incoming_notes ORDER BY received_at DESC'
   );
+  Logger.debug('db', 'getAllIncomingNotes: result', { count: rows.length });
+  return rows;
 }
 
 export async function getRandomIncomingNote(): Promise<IncomingNote | null> {
+  Logger.debug('db', 'getRandomIncomingNote');
   const database = await getDatabase();
   const result = await database.getFirstAsync<IncomingNote>(
     'SELECT * FROM incoming_notes ORDER BY RANDOM() LIMIT 1'
   );
+  Logger.debug('db', 'getRandomIncomingNote: result', { found: !!result });
   return result ?? null;
 }
 
 export async function markNoteShown(noteId: string): Promise<void> {
+  Logger.debug('db', 'markNoteShown', { noteId });
   const database = await getDatabase();
   await database.runAsync(
     'UPDATE incoming_notes SET last_shown_at = ? WHERE id = ?',
@@ -200,6 +225,11 @@ export type CachedConnection = {
 };
 
 export async function upsertConnectionCache(conn: CachedConnection): Promise<void> {
+  Logger.debug('db', 'upsertConnectionCache', {
+    userId: conn.user_id,
+    displayName: conn.display_name,
+    hasKey: !!conn.public_key,
+  });
   const database = await getDatabase();
   await database.runAsync(
     `INSERT OR REPLACE INTO connections_cache (id, user_id, display_name, public_key, status, updated_at)
@@ -209,22 +239,28 @@ export async function upsertConnectionCache(conn: CachedConnection): Promise<voi
 }
 
 export async function getAcceptedConnections(): Promise<CachedConnection[]> {
+  Logger.debug('db', 'getAcceptedConnections');
   const database = await getDatabase();
-  return database.getAllAsync<CachedConnection>(
+  const rows = await database.getAllAsync<CachedConnection>(
     "SELECT * FROM connections_cache WHERE status = 'accepted' ORDER BY display_name"
   );
+  Logger.debug('db', 'getAcceptedConnections: result', { count: rows.length });
+  return rows;
 }
 
 export async function getConnectionByUserId(userId: string): Promise<CachedConnection | null> {
+  Logger.debug('db', 'getConnectionByUserId', { userId });
   const database = await getDatabase();
   const result = await database.getFirstAsync<CachedConnection>(
     'SELECT * FROM connections_cache WHERE user_id = ?',
     [userId]
   );
+  Logger.debug('db', 'getConnectionByUserId: result', { found: !!result });
   return result ?? null;
 }
 
 export async function removeConnectionCache(connectionId: string): Promise<void> {
+  Logger.debug('db', 'removeConnectionCache', { connectionId });
   const database = await getDatabase();
   await database.runAsync('DELETE FROM connections_cache WHERE id = ?', [connectionId]);
 }
@@ -243,6 +279,7 @@ export async function getSetting(key: string): Promise<string | null> {
 }
 
 export async function setSetting(key: string, value: string): Promise<void> {
+  Logger.debug('db', 'setSetting', { key, value });
   const database = await getDatabase();
   await database.runAsync(
     'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',

@@ -23,6 +23,7 @@ import {
   CachedConnection,
 } from '@/lib/db';
 import { sendNote } from '@/lib/sync';
+import { Logger } from '@/lib/logger';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -39,26 +40,50 @@ export default function ContactDetailScreen() {
 
   const loadData = useCallback(async () => {
     if (!id) return;
+    Logger.debug('contact', 'loadData', { contactId: id });
     try {
       const conn = await getConnectionByUserId(id);
       setConnection(conn);
+      Logger.debug('contact', 'loadData: connection loaded', {
+        displayName: conn?.display_name,
+        hasPublicKey: !!conn?.public_key,
+        keyPrefix: conn?.public_key?.substring(0, 10),
+      });
+
       const outgoing = await getOutgoingNotesForRecipient(id);
       setNotes(outgoing);
+      Logger.debug('contact', 'loadData: notes loaded', { count: outgoing.length });
     } catch (err) {
-      console.error('Error loading contact data:', err);
+      Logger.error('contact', 'loadData: failed', {
+        error: err instanceof Error ? err.message : String(err),
+        contactId: id,
+      });
     } finally {
       setIsLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
+    Logger.debug('contact', 'ContactDetailScreen mounted', { contactId: id });
     loadData();
   }, [loadData]);
 
   async function handleSend() {
     if (!newMessage.trim() || !connection || !profile) return;
 
+    Logger.debug('contact', 'handleSend: initiated', {
+      recipientId: id,
+      recipientName: connection.display_name,
+      isAnonymous,
+      messageLength: newMessage.trim().length,
+      hasPublicKey: !!connection.public_key,
+    });
+
     if (!connection.public_key) {
+      Logger.warn('contact', 'handleSend: recipient has no public key', {
+        recipientId: id,
+        recipientName: connection.display_name,
+      });
       Alert.alert(
         'Empfänger nicht bereit',
         `${connection.display_name} muss die App zuerst öffnen, damit Nachrichten verschlüsselt werden können. Bitte versuche es danach erneut.`
@@ -68,6 +93,7 @@ export default function ContactDetailScreen() {
 
     const message = newMessage.trim();
     if (message.length > 1000) {
+      Logger.warn('contact', 'handleSend: message too long', { length: message.length });
       Alert.alert('Zu lang', 'Die Nachricht darf maximal 1000 Zeichen lang sein.');
       return;
     }
@@ -77,7 +103,7 @@ export default function ContactDetailScreen() {
       const noteId = uuidv4();
       const senderName = isAnonymous ? null : profile.display_name;
 
-      // Store locally
+      Logger.debug('contact', 'handleSend: storing locally', { noteId, isAnonymous, senderName });
       await insertOutgoingNote({
         id: noteId,
         recipient_id: id!,
@@ -86,8 +112,8 @@ export default function ContactDetailScreen() {
         is_anonymous: isAnonymous,
         created_at: new Date().toISOString(),
       });
+      Logger.debug('contact', 'handleSend: stored locally, sending to server...');
 
-      // Send to server
       const result = await sendNote(
         id!,
         connection.public_key,
@@ -96,16 +122,30 @@ export default function ContactDetailScreen() {
       );
 
       if (result.success) {
+        Logger.info('contact', 'handleSend: success', {
+          noteId,
+          recipientId: id,
+          recipientName: connection.display_name,
+        });
         setNewMessage('');
         await loadData();
       } else {
+        Logger.warn('contact', 'handleSend: server send failed (will retry on next sync)', {
+          noteId,
+          error: result.error,
+          recipientId: id,
+        });
         Alert.alert(
           'Senden fehlgeschlagen',
           result.error ?? 'Die Nachricht wird beim nächsten Sync erneut versucht.'
         );
-        await loadData(); // Still show it locally (unsynced)
+        await loadData();
       }
     } catch (err) {
+      Logger.error('contact', 'handleSend: unexpected error', {
+        error: err instanceof Error ? err.message : String(err),
+        recipientId: id,
+      });
       Alert.alert('Fehler', 'Nachricht konnte nicht gesendet werden.');
     } finally {
       setIsSending(false);
@@ -113,12 +153,14 @@ export default function ContactDetailScreen() {
   }
 
   async function handleDelete(noteId: string) {
+    Logger.debug('contact', 'handleDelete: confirm dialog shown', { noteId });
     Alert.alert('Eintrag löschen', 'Möchtest du diesen Eintrag wirklich löschen?', [
       { text: 'Abbrechen', style: 'cancel' },
       {
         text: 'Löschen',
         style: 'destructive',
         onPress: async () => {
+          Logger.info('contact', 'handleDelete: confirmed', { noteId });
           await deleteOutgoingNote(noteId);
           await loadData();
         },
@@ -196,7 +238,10 @@ export default function ContactDetailScreen() {
             <Text style={styles.anonymousLabel}>Anonym senden</Text>
             <Switch
               value={isAnonymous}
-              onValueChange={setIsAnonymous}
+              onValueChange={(v) => {
+                Logger.debug('contact', 'anonymity toggled', { isAnonymous: v });
+                setIsAnonymous(v);
+              }}
               trackColor={{ false: '#ddd', true: '#e74c8b' }}
               thumbColor="#fff"
             />

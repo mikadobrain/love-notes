@@ -8,6 +8,7 @@ import {
 import { Text, View } from '@/components/Themed';
 import { getAllIncomingNotes, IncomingNote } from '@/lib/db';
 import { fetchAndProcessMessages } from '@/lib/sync';
+import { Logger } from '@/lib/logger';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 export default function NotesScreen() {
@@ -16,27 +17,38 @@ export default function NotesScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadNotes = useCallback(async () => {
+    Logger.debug('notes', 'loadNotes: loading from local DB...');
     try {
       const allNotes = await getAllIncomingNotes();
       setNotes(allNotes);
+      Logger.debug('notes', 'loadNotes: done', { count: allNotes.length });
     } catch (err) {
-      console.error('Error loading notes:', err);
+      Logger.error('notes', 'loadNotes: failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   const handleRefresh = useCallback(async () => {
+    Logger.debug('notes', 'handleRefresh: pull-to-refresh triggered');
     setIsRefreshing(true);
     try {
-      await fetchAndProcessMessages();
+      const processed = await fetchAndProcessMessages();
+      Logger.info('notes', 'handleRefresh: fetchAndProcessMessages done', { processed });
       await loadNotes();
+    } catch (err) {
+      Logger.error('notes', 'handleRefresh: failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setIsRefreshing(false);
     }
   }, [loadNotes]);
 
   useEffect(() => {
+    Logger.debug('notes', 'NotesScreen mounted');
     loadNotes();
   }, []);
 

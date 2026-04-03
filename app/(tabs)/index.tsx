@@ -11,7 +11,7 @@ import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth-context';
 import { getAcceptedConnections, CachedConnection } from '@/lib/db';
 import { syncConnections } from '@/lib/sync';
-
+import { Logger } from '@/lib/logger';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 export default function ContactsScreen() {
@@ -22,11 +22,15 @@ export default function ContactsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadConnections = useCallback(async () => {
+    Logger.debug('contacts', 'loadConnections: loading from local cache...');
     try {
       const cached = await getAcceptedConnections();
       setConnections(cached);
+      Logger.debug('contacts', 'loadConnections: done', { count: cached.length });
     } catch (err) {
-      console.error('Error loading connections:', err);
+      Logger.error('contacts', 'loadConnections: failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setIsLoading(false);
     }
@@ -34,20 +38,33 @@ export default function ContactsScreen() {
 
   const handleRefresh = useCallback(async () => {
     if (!user) return;
+    Logger.debug('contacts', 'handleRefresh: pull-to-refresh triggered');
     setIsRefreshing(true);
     try {
       await syncConnections(user.id, profile?.display_name);
       await loadConnections();
+      Logger.info('contacts', 'handleRefresh: done');
+    } catch (err) {
+      Logger.error('contacts', 'handleRefresh: failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setIsRefreshing(false);
     }
   }, [user, profile, loadConnections]);
 
   useEffect(() => {
+    Logger.debug('contacts', 'ContactsScreen mounted, userId:', { userId: user?.id });
     loadConnections();
-    // Also sync from server on mount
     if (user) {
-      syncConnections(user.id, profile?.display_name).then(loadConnections);
+      Logger.debug('contacts', 'starting background syncConnections...');
+      syncConnections(user.id, profile?.display_name)
+        .then(loadConnections)
+        .catch((err) =>
+          Logger.error('contacts', 'background syncConnections failed', {
+            error: err instanceof Error ? err.message : String(err),
+          })
+        );
     }
   }, [user, profile]);
 
@@ -82,7 +99,13 @@ export default function ContactsScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.contactItem}
-            onPress={() => router.push(`/contact/${item.user_id}`)}
+            onPress={() => {
+              Logger.debug('contacts', 'contact tapped', {
+                userId: item.user_id,
+                displayName: item.display_name,
+              });
+              router.push(`/contact/${item.user_id}`);
+            }}
           >
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
