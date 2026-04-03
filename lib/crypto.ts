@@ -1,3 +1,5 @@
+// Must be imported before tweetnacl to polyfill crypto.getRandomValues() in React Native
+import 'react-native-get-random-values';
 import nacl from 'tweetnacl';
 import {
   decodeUTF8,
