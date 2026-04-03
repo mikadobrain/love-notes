@@ -37,6 +37,27 @@ export async function sendNote(
     return { success: false, error: 'no_session' };
   }
 
+  // Force a token refresh to ensure we have a valid, non-expired JWT.
+  // The user JWT expires after 1 hour; if the silent auto-refresh hasn't
+  // happened yet (e.g. on first sync after startup), the gateway rejects with 401.
+  let accessToken = session.access_token;
+  try {
+    const { data: { session: freshSession } } = await supabase.auth.refreshSession();
+    if (freshSession?.access_token) {
+      accessToken = freshSession.access_token;
+      Logger.debug('sync', 'sendNote: token refreshed', {
+        tokenLength: accessToken.length,
+        tokenPrefix: accessToken.substring(0, 20),
+      });
+    } else {
+      Logger.warn('sync', 'sendNote: refreshSession returned no session, using existing token');
+    }
+  } catch (refreshErr) {
+    Logger.warn('sync', 'sendNote: token refresh failed, using existing token', {
+      error: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
+    });
+  }
+
   let encryptedPayload: string;
   try {
     encryptedPayload = encryptNotePayload(message, senderName, recipientPublicKey, keyPair.secretKey);
@@ -51,8 +72,8 @@ export async function sendNote(
 
   Logger.debug('sync', 'sendNote: calling Edge Function', {
     recipientId,
-    tokenLength: session.access_token.length,
-    tokenPrefix: session.access_token.substring(0, 20),
+    tokenLength: accessToken.length,
+    tokenPrefix: accessToken.substring(0, 20),
   });
 
   // Use fetch directly to avoid any supabase-js FunctionsClient header issues.
@@ -63,7 +84,7 @@ export async function sendNote(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
+        'Authorization': `Bearer ${accessToken}`,
         'apikey': supabaseAnonKey,
       },
       body: JSON.stringify({ recipient_id: recipientId, encrypted_payload: encryptedPayload }),
