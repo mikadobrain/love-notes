@@ -146,6 +146,12 @@ export async function syncOutgoingNotes(senderDisplayName?: string | null): Prom
     const conn = await getConnectionByUserId(note.recipient_id);
     if (!conn) continue;
 
+    // Skip if recipient has no public key yet (they haven't opened the app)
+    if (!conn.public_key) {
+      console.log(`Skipping note for ${conn.display_name} – no public key yet`);
+      continue;
+    }
+
     const senderName = note.is_anonymous ? null : (senderDisplayName ?? null);
     const result = await sendNote(
       note.recipient_id,

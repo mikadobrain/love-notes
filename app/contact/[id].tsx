@@ -56,6 +56,14 @@ export default function ContactDetailScreen() {
   async function handleSend() {
     if (!newMessage.trim() || !connection || !profile) return;
 
+    if (!connection.public_key) {
+      Alert.alert(
+        'Empfänger nicht bereit',
+        `${connection.display_name} muss die App zuerst öffnen, damit Nachrichten verschlüsselt werden können. Bitte versuche es danach erneut.`
+      );
+      return;
+    }
+
     const message = newMessage.trim();
     if (message.length > 1000) {
       Alert.alert('Zu lang', 'Die Nachricht darf maximal 1000 Zeichen lang sein.');
@@ -174,6 +182,14 @@ export default function ContactDetailScreen() {
 
         {/* Compose area */}
         <View style={styles.composeArea}>
+          {!connection?.public_key && (
+            <View style={styles.noKeyBanner}>
+              <FontAwesome name="lock" size={14} color="#e67e22" />
+              <Text style={styles.noKeyText}>
+                {connection?.display_name ?? 'Dieser Kontakt'} muss die App öffnen, bevor du schreiben kannst.
+              </Text>
+            </View>
+          )}
           <View style={styles.anonymousToggle}>
             <Text style={styles.anonymousLabel}>Anonym senden</Text>
             <Switch
@@ -320,5 +336,21 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.4,
+  },
+  noKeyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fff8f0',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#f0c080',
+  },
+  noKeyText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#e67e22',
   },
 });
