@@ -1,6 +1,7 @@
 import React from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 
@@ -13,13 +14,14 @@ function TabBarIcon(props: {
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        // Ensure tab bar sits above Android gesture navigation bar
-        tabBarStyle: { paddingBottom: 4 },
+        // Lift tab bar above Android gesture navigation bar
+        tabBarStyle: { height: 56 + insets.bottom, paddingBottom: insets.bottom },
         headerShown: true,
       }}
     >

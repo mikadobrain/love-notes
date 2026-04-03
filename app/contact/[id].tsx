@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -28,6 +29,7 @@ import { v4 as uuidv4 } from 'uuid';
 export default function ContactDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
+  const insets = useSafeAreaInsets();
   const [connection, setConnection] = useState<CachedConnection | null>(null);
   const [notes, setNotes] = useState<OutgoingNote[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -180,8 +182,8 @@ export default function ContactDetailScreen() {
           )}
         />
 
-        {/* Compose area */}
-        <View style={styles.composeArea}>
+        {/* Compose area – paddingBottom keeps it above gesture nav bar */}
+        <View style={[styles.composeArea, { paddingBottom: insets.bottom + 12 }]}>
           {!connection?.public_key && (
             <View style={styles.noKeyBanner}>
               <FontAwesome name="lock" size={14} color="#e67e22" />
@@ -294,7 +296,8 @@ const styles = StyleSheet.create({
   composeArea: {
     borderTopWidth: 1,
     borderTopColor: '#eee',
-    padding: 12,
+    paddingTop: 12,
+    paddingHorizontal: 12,
   },
   anonymousToggle: {
     flexDirection: 'row',

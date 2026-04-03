@@ -10,10 +10,12 @@ import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth-context';
 import { getSetting, setSetting } from '@/lib/db';
 import { scheduleRandomNoteNotification } from '@/lib/notifications';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 export default function SettingsScreen() {
   const { user, profile, signOut } = useAuth();
+  const insets = useSafeAreaInsets();
   const [intervalHours, setIntervalHours] = useState(8);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -47,7 +49,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
       {/* Profile Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Profil</Text>
