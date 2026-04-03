@@ -18,6 +18,9 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        // Ensure tab bar sits above Android gesture navigation bar
+        tabBarStyle: { paddingBottom: 4 },
+        headerShown: true,
       }}
     >
       <Tabs.Screen

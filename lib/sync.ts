@@ -27,6 +27,15 @@ export async function sendNote(
     return { success: false, error: 'Schlüsselpaar nicht gefunden. Bitte erneut anmelden.' };
   }
 
+  // Verify there is an active user session before hitting the Edge Function.
+  // syncOutgoingNotes can run on app start before the JWT is fully loaded
+  // from SecureStore, which would result in "Invalid JWT" from the server.
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    Logger.warn('sync', 'sendNote: no active session, deferring send');
+    return { success: false, error: 'no_session' };
+  }
+
   let encryptedPayload: string;
   try {
     encryptedPayload = encryptNotePayload(message, senderName, recipientPublicKey, keyPair.secretKey);
