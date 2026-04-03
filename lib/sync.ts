@@ -46,34 +46,52 @@ export async function sendNote(
     return { success: false, error: `Verschlüsselung fehlgeschlagen: ${detail}` };
   }
 
-  Logger.debug('sync', 'sendNote: invoking Edge Function', { recipientId });
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+  const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
-  const { data, error } = await supabase.functions.invoke('send-note', {
-    body: { recipient_id: recipientId, encrypted_payload: encryptedPayload },
-    // Pass token explicitly – avoids race condition where FunctionsClient
-    // headers haven't yet been updated after session load from SecureStore
-    headers: { Authorization: `Bearer ${session.access_token}` },
+  Logger.debug('sync', 'sendNote: calling Edge Function', {
+    recipientId,
+    tokenLength: session.access_token.length,
+    tokenPrefix: session.access_token.substring(0, 20),
   });
 
-  if (error) {
-    // Extract the real response body from FunctionsHttpError
-    let detail = error.message;
-    try {
-      // supabase-js wraps the response; try to read the JSON body
-      const ctx = (error as { context?: Response }).context;
-      if (ctx) {
-        const text = await ctx.text();
-        const parsed = JSON.parse(text);
-        detail = parsed.error ?? parsed.message ?? text;
-      }
-    } catch {
-      // ignore parse errors, use original message
-    }
-    Logger.error('sync', 'sendNote: Edge Function error', { detail, recipientId });
+  // Use fetch directly to avoid any supabase-js FunctionsClient header issues.
+  // Both Authorization (user JWT) and apikey (anon key) headers are required.
+  let response: Response;
+  try {
+    response = await fetch(`${supabaseUrl}/functions/v1/send-note`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': supabaseAnonKey,
+      },
+      body: JSON.stringify({ recipient_id: recipientId, encrypted_payload: encryptedPayload }),
+    });
+  } catch (fetchErr) {
+    const detail = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+    Logger.error('sync', 'sendNote: network error', { detail, recipientId });
+    return { success: false, error: `Netzwerkfehler: ${detail}` };
+  }
+
+  let responseBody: { success?: boolean; message_id?: string; error?: string } = {};
+  try {
+    responseBody = await response.json();
+  } catch {
+    // non-JSON response
+  }
+
+  if (!response.ok) {
+    const detail = responseBody.error ?? `HTTP ${response.status}`;
+    Logger.error('sync', 'sendNote: Edge Function error', {
+      status: response.status,
+      detail,
+      recipientId,
+    });
     return { success: false, error: detail };
   }
 
-  Logger.info('sync', 'sendNote: success', { recipientId, messageId: data?.message_id });
+  Logger.info('sync', 'sendNote: success', { recipientId, messageId: responseBody.message_id });
   return { success: true };
 }
 

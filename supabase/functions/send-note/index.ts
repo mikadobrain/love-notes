@@ -57,14 +57,25 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Missing authorization header' }, 401);
     }
 
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
+    // Extract the raw JWT (strip "Bearer " prefix)
+    const jwt = authHeader.replace(/^Bearer\s+/i, '');
+
+    await writeLog(adminClient, 'debug', 'send-note', 'Auth attempt', null, {
+      tokenLength: jwt.length,
+      tokenPrefix: jwt.substring(0, 20),
     });
 
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    // Use adminClient.auth.getUser(jwt) – validates the JWT against the
+    // project's JWT secret directly without a second HTTP round-trip.
+    const { data: { user }, error: authError } = await adminClient.auth.getUser(jwt);
     if (authError || !user) {
-      await writeLog(adminClient, 'warn', 'send-note', 'Auth failed', null, { authError });
-      return json({ error: 'Unauthorized' }, 401);
+      await writeLog(adminClient, 'warn', 'send-note', 'Auth failed', null, {
+        error: authError?.message,
+        code: authError?.code,
+        tokenLength: jwt.length,
+        tokenPrefix: jwt.substring(0, 20),
+      });
+      return json({ error: authError?.message ?? 'Unauthorized' }, 401);
     }
     userId = user.id;
 
