@@ -92,7 +92,11 @@ export async function sendNote(
         'Authorization': `Bearer ${accessToken}`,
         'apikey': supabaseAnonKey,
       },
-      body: JSON.stringify({ recipient_id: recipientId, encrypted_payload: encryptedPayload }),
+      body: JSON.stringify({
+        recipient_id: recipientId,
+        encrypted_payload: encryptedPayload,
+        sender_public_key: keyPair.publicKey, // stored in queue so recipient can decrypt even after sender key rotation
+      }),
       signal: controller.signal,
     });
     Logger.debug('sync', 'sendNote: fetch completed', { status: response.status });
@@ -166,9 +170,16 @@ export async function fetchAndProcessMessages(): Promise<number> {
   let processedCount = 0;
 
   for (const msg of queue) {
-    Logger.debug('sync', 'fetchAndProcessMessages: processing message', { id: msg.id });
+    Logger.debug('sync', 'fetchAndProcessMessages: processing message', {
+      id: msg.id,
+      hasSenderKey: !!msg.sender_public_key,
+    });
     try {
-      const decrypted = await tryDecryptFromConnections(msg.encrypted_payload, keyPair.secretKey);
+      // Prefer the sender_public_key stored with the message (immune to key rotation).
+      // Fall back to iterating connection cache for messages sent before this field existed.
+      const decrypted = msg.sender_public_key
+        ? tryDecryptWithKey(msg.encrypted_payload, msg.sender_public_key, keyPair.secretKey)
+        : await tryDecryptFromConnections(msg.encrypted_payload, keyPair.secretKey);
 
       if (decrypted) {
         Logger.debug('sync', 'fetchAndProcessMessages: decryption OK', {
@@ -202,7 +213,31 @@ export async function fetchAndProcessMessages(): Promise<number> {
 }
 
 /**
+ * Decrypt a message with a specific sender public key.
+ * Returns null if decryption fails (wrong key / tampered message).
+ */
+function tryDecryptWithKey(
+  encryptedPayload: string,
+  senderPublicKey: string,
+  recipientSecretKey: string
+): { message: string; senderName: string | null; timestamp: string } | null {
+  try {
+    const result = decryptNotePayload(encryptedPayload, senderPublicKey, recipientSecretKey);
+    Logger.debug('sync', 'tryDecryptWithKey: success', {
+      keyPrefix: senderPublicKey.substring(0, 10),
+    });
+    return result;
+  } catch {
+    Logger.warn('sync', 'tryDecryptWithKey: decryption failed with stored sender key', {
+      keyPrefix: senderPublicKey.substring(0, 10),
+    });
+    return null;
+  }
+}
+
+/**
  * Try to decrypt a message by testing against all connection public keys.
+ * Fallback for messages sent before sender_public_key was stored in the queue.
  * Returns the decrypted payload if successful, null otherwise.
  */
 async function tryDecryptFromConnections(

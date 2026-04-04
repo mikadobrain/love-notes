@@ -66,6 +66,7 @@ export type MessageQueueItem = {
   id: string;
   recipient_id: string;
   encrypted_payload: string;
+  sender_public_key: string | null; // stored at send-time so key rotations don't break decryption
   created_at: string;
   delivered: boolean;
 };

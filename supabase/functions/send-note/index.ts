@@ -80,7 +80,7 @@ Deno.serve(async (req: Request) => {
     userId = user.id;
 
     // ── 2. Parse body ────────────────────────────────────────────────────────
-    let body: { recipient_id?: string; encrypted_payload?: string };
+    let body: { recipient_id?: string; encrypted_payload?: string; sender_public_key?: string };
     try {
       body = await req.json();
     } catch {
@@ -88,7 +88,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Invalid JSON body' }, 400);
     }
 
-    const { recipient_id, encrypted_payload } = body;
+    const { recipient_id, encrypted_payload, sender_public_key } = body;
 
     if (!recipient_id || !encrypted_payload) {
       await writeLog(adminClient, 'warn', 'send-note', 'Missing fields', userId, {
@@ -183,7 +183,13 @@ Deno.serve(async (req: Request) => {
     // ── 5. Insert message ────────────────────────────────────────────────────
     const { data: message, error: insertError } = await adminClient
       .from('message_queue')
-      .insert({ recipient_id, encrypted_payload })
+      .insert({
+        recipient_id,
+        encrypted_payload,
+        // Store the sender's public key so the recipient can always decrypt,
+        // even if the sender's key rotates before the message is picked up.
+        sender_public_key: sender_public_key ?? null,
+      })
       .select('id')
       .single();
 
