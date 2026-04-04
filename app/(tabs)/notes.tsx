@@ -1,26 +1,41 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   StyleSheet,
-  FlatList,
   RefreshControl,
+  ScrollView,
+  TouchableOpacity,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import { getAllIncomingNotes, IncomingNote } from '@/lib/db';
-import { fetchAndProcessMessages } from '@/lib/sync';
+import { fetchAndProcessMessages, syncConnections } from '@/lib/sync';
+import { scheduleRandomNoteNotification } from '@/lib/notifications';
 import { Logger } from '@/lib/logger';
+import { useAuth } from '@/lib/auth-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 export default function NotesScreen() {
+  const { user, profile } = useAuth();
+  const insets = useSafeAreaInsets();
   const [notes, setNotes] = useState<IncomingNote[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Fade animation for note transitions
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
   const loadNotes = useCallback(async () => {
     Logger.debug('notes', 'loadNotes: loading from local DB...');
     try {
       const allNotes = await getAllIncomingNotes();
       setNotes(allNotes);
+      // Pick a random starting note each time
+      if (allNotes.length > 0) {
+        setCurrentIndex(Math.floor(Math.random() * allNotes.length));
+      }
       Logger.debug('notes', 'loadNotes: done', { count: allNotes.length });
     } catch (err) {
       Logger.error('notes', 'loadNotes: failed', {
@@ -32,12 +47,27 @@ export default function NotesScreen() {
   }, []);
 
   const handleRefresh = useCallback(async () => {
-    Logger.debug('notes', 'handleRefresh: pull-to-refresh triggered');
+    Logger.debug('notes', 'handleRefresh: triggered');
     setIsRefreshing(true);
     try {
+      // Must sync connections first so we have the sender's public key
+      // in the local cache before attempting decryption
+      if (user) {
+        Logger.debug('notes', 'handleRefresh: syncing connections for decryption keys...');
+        await syncConnections(user.id, profile?.display_name);
+      }
+
+      Logger.debug('notes', 'handleRefresh: fetching messages from queue...');
       const processed = await fetchAndProcessMessages();
-      Logger.info('notes', 'handleRefresh: fetchAndProcessMessages done', { processed });
+      Logger.info('notes', 'handleRefresh: done', { newMessages: processed });
+
       await loadNotes();
+
+      // Schedule a notification for the newly arrived notes
+      if (processed > 0) {
+        await scheduleRandomNoteNotification();
+        Logger.info('notes', `handleRefresh: ${processed} new note(s), notification scheduled`);
+      }
     } catch (err) {
       Logger.error('notes', 'handleRefresh: failed', {
         error: err instanceof Error ? err.message : String(err),
@@ -45,12 +75,35 @@ export default function NotesScreen() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [loadNotes]);
+  }, [user, profile, loadNotes]);
 
   useEffect(() => {
     Logger.debug('notes', 'NotesScreen mounted');
     loadNotes();
   }, []);
+
+  function showNextNote() {
+    if (notes.length <= 1) return;
+    // Fade out, pick new random index (not the same), fade in
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setCurrentIndex((prev) => {
+        let next = Math.floor(Math.random() * notes.length);
+        // Avoid showing the same note twice in a row
+        if (notes.length > 1 && next === prev) next = (next + 1) % notes.length;
+        return next;
+      });
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    });
+    Logger.debug('notes', 'showNextNote tapped');
+  }
 
   if (isLoading) {
     return (
@@ -60,51 +113,89 @@ export default function NotesScreen() {
     );
   }
 
-  if (notes.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <FontAwesome name="heart-o" size={64} color="#ccc" />
-        <Text style={styles.emptyTitle}>Noch keine LoveNotes</Text>
-        <Text style={styles.emptyText}>
-          Wenn jemand dir eine nette Nachricht schickt, erscheint sie hier.
-        </Text>
-      </View>
-    );
-  }
+  const currentNote: IncomingNote | undefined = notes[currentIndex];
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        data={notes}
-        keyExtractor={(item) => item.id}
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
-        }
-        contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => (
-          <View style={styles.noteCard}>
-            <View style={styles.noteHeader}>
-              <FontAwesome
-                name={item.sender_name ? 'user' : 'user-secret'}
-                size={16}
-                color="#e74c8b"
-              />
-              <Text style={styles.senderName}>
-                {item.sender_name ?? 'Jemand'}
-              </Text>
-            </View>
-            <Text style={styles.noteMessage}>{item.message}</Text>
-            <Text style={styles.noteDate}>
-              {new Date(item.received_at).toLocaleDateString('de-DE', {
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          tintColor="#e74c8b"
+          colors={['#e74c8b']}
+        />
+      }
+    >
+      {notes.length === 0 ? (
+        /* ── Empty state ─────────────────────────────────── */
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyEmoji}>💌</Text>
+          <Text style={styles.emptyTitle}>Noch keine LoveNotes</Text>
+          <Text style={styles.emptyHint}>
+            Wenn jemand dir eine positive Nachricht schickt, bekommst du sie als Benachrichtigung.
+          </Text>
+          <Text style={styles.emptyPull}>↓ Zieh zum Aktualisieren</Text>
+        </View>
+      ) : (
+        /* ── Note card ───────────────────────────────────── */
+        <>
+          {/* Subtle counter – just a number, no content preview */}
+          <View style={styles.counterRow}>
+            <FontAwesome name="heart" size={14} color="#e74c8b" />
+            <Text style={styles.counterText}>
+              {notes.length} {notes.length === 1 ? 'LoveNote' : 'LoveNotes'} erhalten
             </Text>
           </View>
-        )}
-      />
-    </View>
+
+          <Animated.View style={[styles.noteCard, { opacity: fadeAnim }]}>
+            {/* Quote marks */}
+            <Text style={styles.quoteOpen}>"</Text>
+
+            <Text style={styles.noteMessage}>{currentNote?.message}</Text>
+
+            <Text style={styles.quoteClose}>"</Text>
+
+            {/* Sender */}
+            <View style={styles.senderRow}>
+              <View style={styles.senderDivider} />
+              <FontAwesome
+                name={currentNote?.sender_name ? 'user' : 'user-secret'}
+                size={13}
+                color="#e74c8b"
+                style={{ marginHorizontal: 8 }}
+              />
+              <Text style={styles.senderName}>
+                {currentNote?.sender_name ?? 'Jemand'}
+              </Text>
+              <View style={styles.senderDivider} />
+            </View>
+
+            {/* Date */}
+            <Text style={styles.noteDate}>
+              {currentNote
+                ? new Date(currentNote.received_at).toLocaleDateString('de-DE', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                  })
+                : ''}
+            </Text>
+          </Animated.View>
+
+          {/* Next note button */}
+          {notes.length > 1 && (
+            <TouchableOpacity style={styles.nextButton} onPress={showNextNote} activeOpacity={0.7}>
+              <FontAwesome name="random" size={16} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.nextButtonText}>Nächste Note</Text>
+            </TouchableOpacity>
+          )}
+
+          <Text style={styles.pullHint}>↓ Zieh zum Aktualisieren</Text>
+        </>
+      )}
+    </ScrollView>
   );
 }
 
@@ -112,57 +203,145 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  content: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+  },
+
+  /* Empty state */
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  emptyEmoji: {
+    fontSize: 64,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 15,
+    fontSize: 22,
+    fontWeight: '700',
     textAlign: 'center',
-    opacity: 0.6,
   },
-  listContent: {
-    padding: 16,
+  emptyHint: {
+    fontSize: 15,
+    color: '#888',
+    textAlign: 'center',
+    lineHeight: 22,
   },
-  noteCard: {
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 12,
-    backgroundColor: '#fff0f5',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+  emptyPull: {
+    marginTop: 24,
+    fontSize: 13,
+    color: '#ccc',
   },
-  noteHeader: {
+
+  /* Counter */
+  counterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 20,
     backgroundColor: 'transparent',
+  },
+  counterText: {
+    fontSize: 13,
+    color: '#e74c8b',
+    fontWeight: '600',
+  },
+
+  /* Note card */
+  noteCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 32,
+    shadowColor: '#e74c8b',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 6,
+    alignItems: 'center',
+  },
+  quoteOpen: {
+    fontSize: 72,
+    color: '#f8c0d8',
+    lineHeight: 60,
+    alignSelf: 'flex-start',
+    marginBottom: -12,
+    fontFamily: 'Georgia',
+  },
+  noteMessage: {
+    fontSize: 20,
+    lineHeight: 30,
+    color: '#333',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    paddingHorizontal: 8,
+  },
+  quoteClose: {
+    fontSize: 72,
+    color: '#f8c0d8',
+    lineHeight: 60,
+    alignSelf: 'flex-end',
+    marginTop: -12,
+    fontFamily: 'Georgia',
+  },
+  senderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 24,
+    width: '100%',
+    backgroundColor: 'transparent',
+  },
+  senderDivider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#f0c0d8',
   },
   senderName: {
     fontSize: 14,
-    fontWeight: '600',
     color: '#e74c8b',
-    marginLeft: 8,
-  },
-  noteMessage: {
-    fontSize: 17,
-    lineHeight: 24,
-    color: '#333',
+    fontWeight: '600',
   },
   noteDate: {
     fontSize: 12,
-    color: '#999',
-    marginTop: 12,
+    color: '#bbb',
+    marginTop: 10,
+  },
+
+  /* Next button */
+  nextButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e74c8b',
+    borderRadius: 30,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    marginTop: 24,
+    shadowColor: '#e74c8b',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  nextButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  pullHint: {
+    textAlign: 'center',
+    marginTop: 20,
+    fontSize: 12,
+    color: '#ccc',
   },
 });

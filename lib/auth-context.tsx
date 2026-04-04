@@ -5,6 +5,8 @@ import { supabase, Profile } from './supabase';
 import { generateAndStoreKeyPair, getPublicKey } from './crypto';
 import { Logger } from './logger';
 import { getSetting } from './db';
+import { syncConnections, fetchAndProcessMessages } from './sync';
+import { scheduleRandomNoteNotification } from './notifications';
 
 type AuthContextType = {
   session: Session | null;
@@ -90,6 +92,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         setProfile(data as Profile | null);
         ensureKeyPair(userId);
+        // Background startup sync: pull connections + incoming messages
+        // so the user's "Postfach" is up to date immediately after login.
+        backgroundStartupSync(userId, data.display_name);
       } else {
         Logger.warn('auth', 'fetchProfile: no profile found for user', { userId });
         setProfile(null);
@@ -269,6 +274,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       Logger.error('auth', 'ensureKeyPair: unexpected error', {
         error: e instanceof Error ? e.message : String(e),
         userId,
+      });
+    }
+  }
+
+  /**
+   * Runs silently in the background on every login / app resume.
+   * 1. Syncs connection cache (so we have sender public keys for decryption)
+   * 2. Fetches & decrypts pending messages from the queue
+   * 3. Schedules a local notification if new notes arrived
+   */
+  async function backgroundStartupSync(userId: string, displayName: string) {
+    Logger.debug('auth', 'backgroundStartupSync: start', { userId });
+    try {
+      await syncConnections(userId, displayName);
+      const newCount = await fetchAndProcessMessages();
+      Logger.info('auth', 'backgroundStartupSync: done', { newMessages: newCount });
+      if (newCount > 0) {
+        await scheduleRandomNoteNotification();
+        Logger.info('auth', 'backgroundStartupSync: notification scheduled for new notes');
+      }
+    } catch (err) {
+      Logger.error('auth', 'backgroundStartupSync: error', {
+        error: err instanceof Error ? err.message : String(err),
       });
     }
   }

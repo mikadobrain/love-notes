@@ -35,7 +35,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="notes"
         options={{
-          title: 'Meine Notes',
+          title: 'Postfach',
           tabBarIcon: ({ color }) => <TabBarIcon name="heart" color={color} />,
         }}
       />
