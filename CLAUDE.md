@@ -36,6 +36,20 @@ Architektur, Tech-Stack und Implementierungsstand.
 - **Node.js**: via Homebrew installiert
 - **Supabase CLI**: `npx supabase` (kein globales Install nötig)
 
+## Kontextdateien – immer aktuell halten
+
+**Nach jeder bedeutenden Änderung** (neue Features, DB-Schema, Architektur, gelöste Bugs, Phasenwechsel) müssen diese Dateien geprüft und ggf. aktualisiert werden:
+
+1. **`docs/context.md`** – Projektkontext, Architektur, DB-Schema, TODOs, Entwicklungshistorie
+2. **Memory-Dateien** unter `~/.claude/projects/.../memory/`:
+   - `MEMORY.md` – Index der Memory-Dateien
+   - `project_lovenotes.md` – Projektstatus, offene Tasks
+   - `user_profile.md` – Nutzerpräferenzen
+
+Regel: Wenn du Code änderst, frage dich: *Ist `docs/context.md` danach noch korrekt?* Falls nicht → sofort updaten.
+
+---
+
 ## Nützliche Befehle
 
 ```bash
