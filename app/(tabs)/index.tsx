@@ -12,10 +12,12 @@ import { useAuth } from '@/lib/auth-context';
 import { getAcceptedConnections, CachedConnection } from '@/lib/db';
 import { syncConnections } from '@/lib/sync';
 import { Logger } from '@/lib/logger';
+import { useI18n } from '@/lib/i18n';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 export default function ContactsScreen() {
   const { user, profile } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const [connections, setConnections] = useState<CachedConnection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -80,10 +82,8 @@ export default function ContactsScreen() {
     return (
       <View style={styles.centered}>
         <FontAwesome name="users" size={64} color="#ccc" />
-        <Text style={styles.emptyTitle}>Noch keine Verbindungen</Text>
-        <Text style={styles.emptyText}>
-          Lade Freunde ein, die App zu nutzen, oder nimm Verbindungsanfragen an.
-        </Text>
+        <Text style={styles.emptyTitle}>{t('contacts.empty.title')}</Text>
+        <Text style={styles.emptyText}>{t('contacts.empty.text')}</Text>
       </View>
     );
   }

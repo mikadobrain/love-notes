@@ -13,11 +13,13 @@ import { fetchAndProcessMessages, syncConnections } from '@/lib/sync';
 import { scheduleRandomNoteNotification } from '@/lib/notifications';
 import { Logger } from '@/lib/logger';
 import { useAuth } from '@/lib/auth-context';
+import { useI18n } from '@/lib/i18n';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 export default function NotesScreen() {
   const { user, profile } = useAuth();
+  const { t, language } = useI18n();
   const insets = useSafeAreaInsets();
   const [notes, setNotes] = useState<IncomingNote[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -114,6 +116,7 @@ export default function NotesScreen() {
   }
 
   const currentNote: IncomingNote | undefined = notes[currentIndex];
+  const dateLocale = language === 'de' ? 'de-DE' : 'en-US';
 
   return (
     <ScrollView
@@ -132,11 +135,9 @@ export default function NotesScreen() {
         /* ── Empty state ─────────────────────────────────── */
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyEmoji}>💌</Text>
-          <Text style={styles.emptyTitle}>Noch keine LoveNotes</Text>
-          <Text style={styles.emptyHint}>
-            Wenn jemand dir eine positive Nachricht schickt, bekommst du sie als Benachrichtigung.
-          </Text>
-          <Text style={styles.emptyPull}>↓ Zieh zum Aktualisieren</Text>
+          <Text style={styles.emptyTitle}>{t('notes.empty.title')}</Text>
+          <Text style={styles.emptyHint}>{t('notes.empty.hint')}</Text>
+          <Text style={styles.emptyPull}>{t('notes.empty.pull')}</Text>
         </View>
       ) : (
         /* ── Note card ───────────────────────────────────── */
@@ -145,7 +146,9 @@ export default function NotesScreen() {
           <View style={styles.counterRow}>
             <FontAwesome name="heart" size={14} color="#e74c8b" />
             <Text style={styles.counterText}>
-              {notes.length} {notes.length === 1 ? 'LoveNote' : 'LoveNotes'} erhalten
+              {notes.length === 1
+                ? t('notes.counter.singular')
+                : t('notes.counter.plural', { n: notes.length })}
             </Text>
           </View>
 
@@ -167,7 +170,7 @@ export default function NotesScreen() {
                 style={{ marginHorizontal: 8 }}
               />
               <Text style={styles.senderName}>
-                {currentNote?.sender_name ?? 'Jemand'}
+                {currentNote?.sender_name ?? t('notes.sender.anonymous')}
               </Text>
               <View style={styles.senderDivider} />
             </View>
@@ -175,7 +178,7 @@ export default function NotesScreen() {
             {/* Date */}
             <Text style={styles.noteDate}>
               {currentNote
-                ? new Date(currentNote.received_at).toLocaleDateString('de-DE', {
+                ? new Date(currentNote.received_at).toLocaleDateString(dateLocale, {
                     day: 'numeric',
                     month: 'long',
                     year: 'numeric',
@@ -188,11 +191,11 @@ export default function NotesScreen() {
           {notes.length > 1 && (
             <TouchableOpacity style={styles.nextButton} onPress={showNextNote} activeOpacity={0.7}>
               <FontAwesome name="random" size={16} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.nextButtonText}>Nächste Note</Text>
+              <Text style={styles.nextButtonText}>{t('notes.next')}</Text>
             </TouchableOpacity>
           )}
 
-          <Text style={styles.pullHint}>↓ Zieh zum Aktualisieren</Text>
+          <Text style={styles.pullHint}>{t('notes.pullHint')}</Text>
         </>
       )}
     </ScrollView>

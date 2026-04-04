@@ -4,6 +4,7 @@ import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useI18n } from '@/lib/i18n';
 
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>['name'];
@@ -15,6 +16,7 @@ function TabBarIcon(props: {
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
+  const { t } = useI18n();
 
   return (
     <Tabs
@@ -28,28 +30,28 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Kontakte',
+          title: t('tabs.contacts'),
           tabBarIcon: ({ color }) => <TabBarIcon name="users" color={color} />,
         }}
       />
       <Tabs.Screen
         name="notes"
         options={{
-          title: 'Postfach',
+          title: t('tabs.inbox'),
           tabBarIcon: ({ color }) => <TabBarIcon name="heart" color={color} />,
         }}
       />
       <Tabs.Screen
         name="requests"
         options={{
-          title: 'Anfragen',
+          title: t('tabs.requests'),
           tabBarIcon: ({ color }) => <TabBarIcon name="user-plus" color={color} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Einstellungen',
+          title: t('tabs.settings'),
           tabBarIcon: ({ color }) => <TabBarIcon name="cog" color={color} />,
         }}
       />
