@@ -11,9 +11,11 @@ import {
 } from 'react-native';
 import { Text, View } from '../components/Themed';
 import { useAuth } from '../lib/auth-context';
+import { useI18n } from '../lib/i18n';
 
 export default function AuthScreen() {
   const { signInWithEmail, signUpWithEmail } = useAuth();
+  const { t } = useI18n();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,17 +24,17 @@ export default function AuthScreen() {
 
   async function handleSubmit() {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Fehler', 'Bitte E-Mail und Passwort eingeben.');
+      Alert.alert(t('contact.error.title'), t('auth.error.required'));
       return;
     }
 
     if (!isLogin && !displayName.trim()) {
-      Alert.alert('Fehler', 'Bitte einen Anzeigenamen eingeben.');
+      Alert.alert(t('contact.error.title'), t('auth.error.nameRequired'));
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Fehler', 'Das Passwort muss mindestens 6 Zeichen lang sein.');
+      Alert.alert(t('contact.error.title'), t('auth.error.passwordShort'));
       return;
     }
 
@@ -41,16 +43,16 @@ export default function AuthScreen() {
       if (isLogin) {
         const { error } = await signInWithEmail(email.trim(), password);
         if (error) {
-          Alert.alert('Anmeldung fehlgeschlagen', error.message);
+          Alert.alert(t('auth.error.loginFailed'), error.message);
         }
       } else {
         const { error } = await signUpWithEmail(email.trim(), password, displayName.trim());
         if (error) {
-          Alert.alert('Registrierung fehlgeschlagen', error.message);
+          Alert.alert(t('auth.error.registerFailed'), error.message);
         } else {
           Alert.alert(
-            'Registrierung erfolgreich',
-            'Bitte bestätige deine E-Mail-Adresse, um dich anzumelden.'
+            t('auth.registerSuccess.title'),
+            t('auth.registerSuccess.message')
           );
           setIsLogin(true);
         }
@@ -71,20 +73,18 @@ export default function AuthScreen() {
       >
         <View style={styles.header}>
           <Text style={styles.logo}>LoveNotes</Text>
-          <Text style={styles.subtitle}>
-            Teile Wertschätzung mit den Menschen, die dir wichtig sind
-          </Text>
+          <Text style={styles.subtitle}>{t('auth.subtitle')}</Text>
         </View>
 
         <View style={styles.form}>
           <Text style={styles.formTitle}>
-            {isLogin ? 'Anmelden' : 'Registrieren'}
+            {isLogin ? t('auth.login') : t('auth.register')}
           </Text>
 
           {!isLogin && (
             <TextInput
               style={styles.input}
-              placeholder="Anzeigename"
+              placeholder={t('auth.displayName')}
               placeholderTextColor="#999"
               value={displayName}
               onChangeText={setDisplayName}
@@ -95,7 +95,7 @@ export default function AuthScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="E-Mail"
+            placeholder={t('auth.email')}
             placeholderTextColor="#999"
             value={email}
             onChangeText={setEmail}
@@ -106,7 +106,7 @@ export default function AuthScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Passwort"
+            placeholder={t('auth.password')}
             placeholderTextColor="#999"
             value={password}
             onChangeText={setPassword}
@@ -122,7 +122,7 @@ export default function AuthScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.buttonText}>
-                {isLogin ? 'Anmelden' : 'Registrieren'}
+                {isLogin ? t('auth.login') : t('auth.register')}
               </Text>
             )}
           </TouchableOpacity>
@@ -132,9 +132,7 @@ export default function AuthScreen() {
             onPress={() => setIsLogin(!isLogin)}
           >
             <Text style={styles.switchText}>
-              {isLogin
-                ? 'Noch kein Konto? Jetzt registrieren'
-                : 'Bereits ein Konto? Anmelden'}
+              {isLogin ? t('auth.switchToRegister') : t('auth.switchToLogin')}
             </Text>
           </TouchableOpacity>
         </View>

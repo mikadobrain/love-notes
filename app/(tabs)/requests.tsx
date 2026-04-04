@@ -16,6 +16,7 @@ import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth-context';
 import { supabase, Connection } from '@/lib/supabase';
 import { Logger } from '@/lib/logger';
+import { useI18n } from '@/lib/i18n';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 type ConnectionRequest = Connection & {
@@ -30,6 +31,7 @@ type FoundProfile = {
 
 export default function RequestsScreen() {
   const { user } = useAuth();
+  const { t } = useI18n();
   const [incoming, setIncoming] = useState<ConnectionRequest[]>([]);
   const [outgoing, setOutgoing] = useState<ConnectionRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -103,7 +105,7 @@ export default function RequestsScreen() {
 
     if (error) {
       Logger.error('requests', 'handleAccept: failed', { error: error.message, connectionId });
-      Alert.alert('Fehler', 'Verbindungsanfrage konnte nicht angenommen werden.');
+      Alert.alert(t('contact.error.title'), t('requests.error.accept'));
     } else {
       Logger.info('requests', 'handleAccept: accepted', { connectionId });
       await loadRequests();
@@ -112,10 +114,10 @@ export default function RequestsScreen() {
 
   async function handleReject(connectionId: string) {
     Logger.info('requests', 'handleReject: confirm dialog shown', { connectionId });
-    Alert.alert('Anfrage ablehnen', 'Möchtest du diese Anfrage wirklich ablehnen?', [
-      { text: 'Abbrechen', style: 'cancel' },
+    Alert.alert(t('requests.reject.title'), t('requests.reject.message'), [
+      { text: t('requests.reject.cancel'), style: 'cancel' },
       {
-        text: 'Ablehnen',
+        text: t('requests.reject.confirm'),
         style: 'destructive',
         onPress: async () => {
           Logger.info('requests', 'handleReject: confirmed', { connectionId });
@@ -126,7 +128,7 @@ export default function RequestsScreen() {
 
           if (error) {
             Logger.error('requests', 'handleReject: failed', { error: error.message, connectionId });
-            Alert.alert('Fehler', 'Anfrage konnte nicht abgelehnt werden.');
+            Alert.alert(t('contact.error.title'), t('requests.error.reject'));
           } else {
             Logger.info('requests', 'handleReject: rejected', { connectionId });
             await loadRequests();
@@ -160,7 +162,7 @@ export default function RequestsScreen() {
 
       if (error || !data) {
         Logger.warn('requests', 'handleSearch: no profile found', { error: error?.message });
-        setSearchError('Kein Nutzer mit dieser E-Mail gefunden.');
+        setSearchError(t('requests.notFound'));
         return;
       }
 
@@ -171,7 +173,7 @@ export default function RequestsScreen() {
 
       if (data.id === user?.id) {
         Logger.debug('requests', 'handleSearch: user searched for themselves');
-        setSearchError('Das bist du selbst 😄');
+        setSearchError(t('requests.selfSearch'));
         return;
       }
 
@@ -195,9 +197,9 @@ export default function RequestsScreen() {
 
       if (existing) {
         if (existing.status === 'accepted') {
-          setSearchError(`Du bist bereits mit ${data.display_name} verbunden.`);
+          setSearchError(t('requests.alreadyConnected', { name: data.display_name }));
         } else if (existing.status === 'pending') {
-          setSearchError(`Anfrage an ${data.display_name} ist bereits ausstehend.`);
+          setSearchError(t('requests.alreadyPending', { name: data.display_name }));
         } else {
           setFoundProfile(data);
         }
@@ -210,7 +212,7 @@ export default function RequestsScreen() {
       Logger.error('requests', 'handleSearch: unexpected error', {
         error: e instanceof Error ? e.message : String(e),
       });
-      setSearchError('Fehler bei der Suche. Bitte versuche es erneut.');
+      setSearchError(t('requests.error.search'));
     } finally {
       setIsSearching(false);
     }
@@ -237,13 +239,13 @@ export default function RequestsScreen() {
           code: error.code,
           targetId: foundProfile.id,
         });
-        Alert.alert('Fehler', 'Anfrage konnte nicht gesendet werden: ' + error.message);
+        Alert.alert(t('contact.error.title'), t('requests.error.send') + error.message);
       } else {
         Logger.info('requests', 'handleSendRequest: success', {
           targetId: foundProfile.id,
           targetName: foundProfile.display_name,
         });
-        Alert.alert('Gesendet! ✉️', `Verbindungsanfrage an ${foundProfile.display_name} wurde gesendet.`);
+        Alert.alert(t('requests.sent'), t('requests.sentMessage', { name: foundProfile.display_name }));
         setFoundProfile(null);
         setSearchEmail('');
         await loadRequests();
@@ -252,7 +254,7 @@ export default function RequestsScreen() {
       Logger.error('requests', 'handleSendRequest: unexpected error', {
         error: e instanceof Error ? e.message : String(e),
       });
-      Alert.alert('Fehler', 'Unbekannter Fehler. Bitte versuche es erneut.');
+      Alert.alert(t('contact.error.title'), t('requests.error.unknown'));
     } finally {
       setIsSendingRequest(false);
     }
@@ -281,15 +283,13 @@ export default function RequestsScreen() {
       >
         {/* ── Find User ─────────────────────────────── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Nutzer suchen</Text>
+          <Text style={styles.sectionTitle}>{t('requests.findUser')}</Text>
           <View style={styles.searchCard}>
-            <Text style={styles.searchHint}>
-              Gib die E-Mail-Adresse eines anderen LoveNotes-Nutzers ein, um eine Verbindungsanfrage zu senden.
-            </Text>
+            <Text style={styles.searchHint}>{t('requests.searchHint')}</Text>
             <View style={styles.searchRow}>
               <TextInput
                 style={styles.searchInput}
-                placeholder="E-Mail-Adresse"
+                placeholder={t('requests.emailPlaceholder')}
                 placeholderTextColor="#aaa"
                 value={searchEmail}
                 onChangeText={(t) => {
@@ -337,7 +337,7 @@ export default function RequestsScreen() {
                   ) : (
                     <>
                       <FontAwesome name="user-plus" size={14} color="#fff" />
-                      <Text style={styles.sendRequestText}>Anfrage senden</Text>
+                      <Text style={styles.sendRequestText}>{t('requests.sendRequest')}</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -349,7 +349,7 @@ export default function RequestsScreen() {
         {/* ── Incoming requests ─────────────────────── */}
         {incoming.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Eingehende Anfragen</Text>
+            <Text style={styles.sectionTitle}>{t('requests.incoming')}</Text>
             {incoming.map((item) => (
               <View key={item.id} style={styles.requestItem}>
                 <View style={styles.requestInfo}>
@@ -359,7 +359,7 @@ export default function RequestsScreen() {
                     </Text>
                   </View>
                   <Text style={styles.requestName}>
-                    {item.requester_profile?.display_name ?? 'Unbekannt'}
+                    {item.requester_profile?.display_name ?? t('requests.unknown')}
                   </Text>
                 </View>
                 <View style={styles.actions}>
@@ -384,7 +384,7 @@ export default function RequestsScreen() {
         {/* ── Outgoing requests ─────────────────────── */}
         {outgoing.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Gesendete Anfragen</Text>
+            <Text style={styles.sectionTitle}>{t('requests.outgoing')}</Text>
             {outgoing.map((item) => (
               <View key={item.id} style={styles.requestItem}>
                 <View style={styles.requestInfo}>
@@ -395,9 +395,9 @@ export default function RequestsScreen() {
                   </View>
                   <View style={{ backgroundColor: 'transparent' }}>
                     <Text style={styles.requestName}>
-                      {item.target_profile?.display_name ?? 'Unbekannt'}
+                      {item.target_profile?.display_name ?? t('requests.unknown')}
                     </Text>
-                    <Text style={styles.pendingLabel}>Ausstehend...</Text>
+                    <Text style={styles.pendingLabel}>{t('requests.pending')}</Text>
                   </View>
                 </View>
               </View>
@@ -408,9 +408,7 @@ export default function RequestsScreen() {
         {incoming.length === 0 && outgoing.length === 0 && (
           <View style={styles.emptyHint}>
             <FontAwesome name="user-plus" size={40} color="#ddd" />
-            <Text style={styles.emptyText}>
-              Noch keine Anfragen. Suche oben nach einem Nutzer, um eine Verbindung zu starten.
-            </Text>
+            <Text style={styles.emptyText}>{t('requests.empty')}</Text>
           </View>
         )}
       </ScrollView>

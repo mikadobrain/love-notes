@@ -9,11 +9,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth-context';
+import { useI18n } from '@/lib/i18n';
 import {
   getOutgoingNotesForRecipient,
   insertOutgoingNote,
@@ -28,9 +30,12 @@ import { Logger } from '@/lib/logger';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { v4 as uuidv4 } from 'uuid';
 
+const CHIP_KEYS = ['contact.chip.0', 'contact.chip.1', 'contact.chip.2', 'contact.chip.3'];
+
 export default function ContactDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
+  const { t } = useI18n();
   const insets = useSafeAreaInsets();
   const [connection, setConnection] = useState<CachedConnection | null>(null);
   const [notes, setNotes] = useState<OutgoingNote[]>([]);
@@ -86,8 +91,8 @@ export default function ContactDetailScreen() {
         recipientName: connection.display_name,
       });
       Alert.alert(
-        'Empfänger nicht bereit',
-        `${connection.display_name} muss die App zuerst öffnen, damit Nachrichten verschlüsselt werden können. Bitte versuche es danach erneut.`
+        t('contact.notReady.title'),
+        t('contact.notReady.message', { name: connection.display_name })
       );
       return;
     }
@@ -95,7 +100,7 @@ export default function ContactDetailScreen() {
     const message = newMessage.trim();
     if (message.length > 1000) {
       Logger.warn('contact', 'handleSend: message too long', { length: message.length });
-      Alert.alert('Zu lang', 'Die Nachricht darf maximal 1000 Zeichen lang sein.');
+      Alert.alert(t('contact.tooLong.title'), t('contact.tooLong.message'));
       return;
     }
 
@@ -138,8 +143,8 @@ export default function ContactDetailScreen() {
           recipientId: id,
         });
         Alert.alert(
-          'Senden fehlgeschlagen',
-          result.error ?? 'Die Nachricht wird beim nächsten Sync erneut versucht.'
+          t('contact.sendFailed.title'),
+          result.error ?? t('contact.sendFailed.fallback')
         );
         await loadData();
       }
@@ -148,7 +153,7 @@ export default function ContactDetailScreen() {
         error: err instanceof Error ? err.message : String(err),
         recipientId: id,
       });
-      Alert.alert('Fehler', 'Nachricht konnte nicht gesendet werden.');
+      Alert.alert(t('contact.error.title'), t('contact.error.message'));
     } finally {
       setIsSending(false);
     }
@@ -156,10 +161,10 @@ export default function ContactDetailScreen() {
 
   async function handleDelete(noteId: string) {
     Logger.debug('contact', 'handleDelete: confirm dialog shown', { noteId });
-    Alert.alert('Eintrag löschen', 'Möchtest du diesen Eintrag wirklich löschen?', [
-      { text: 'Abbrechen', style: 'cancel' },
+    Alert.alert(t('contact.delete.title'), t('contact.delete.message'), [
+      { text: t('contact.delete.cancel'), style: 'cancel' },
       {
-        text: 'Löschen',
+        text: t('contact.delete.confirm'),
         style: 'destructive',
         onPress: async () => {
           Logger.info('contact', 'handleDelete: confirmed', { noteId });
@@ -168,6 +173,11 @@ export default function ContactDetailScreen() {
         },
       },
     ]);
+  }
+
+  function handleChipPress(chipKey: string) {
+    const chipText = t(chipKey);
+    setNewMessage(chipText);
   }
 
   if (isLoading) {
@@ -182,7 +192,7 @@ export default function ContactDetailScreen() {
     <>
       <Stack.Screen
         options={{
-          title: connection?.display_name ?? 'Kontakt',
+          title: connection?.display_name ?? t('contact.title'),
         }}
       />
       <KeyboardAvoidingView
@@ -199,7 +209,7 @@ export default function ContactDetailScreen() {
             <View style={styles.emptyContainer}>
               <FontAwesome name="pencil" size={48} color="#ccc" />
               <Text style={styles.emptyText}>
-                Schreibe deine erste Nachricht an {connection?.display_name ?? 'diesen Kontakt'}!
+                {t('contact.emptyText', { name: connection?.display_name ?? '' })}
               </Text>
             </View>
           }
@@ -209,10 +219,10 @@ export default function ContactDetailScreen() {
                 <Text style={styles.noteMessage}>{item.message}</Text>
                 <View style={styles.noteMeta}>
                   <Text style={styles.noteMetaText}>
-                    {item.is_anonymous ? 'Anonym' : 'Mit deinem Namen'}
+                    {item.is_anonymous ? t('contact.anonymous') : t('contact.withName')}
                   </Text>
                   {!item.synced && (
-                    <Text style={styles.unsyncedBadge}>Nicht gesendet</Text>
+                    <Text style={styles.unsyncedBadge}>{t('contact.notSynced')}</Text>
                   )}
                 </View>
               </View>
@@ -232,12 +242,38 @@ export default function ContactDetailScreen() {
             <View style={styles.noKeyBanner}>
               <FontAwesome name="lock" size={14} color="#e67e22" />
               <Text style={styles.noKeyText}>
-                {connection?.display_name ?? 'Dieser Kontakt'} muss die App öffnen, bevor du schreiben kannst.
+                {t('contact.noKey', { name: connection?.display_name ?? '' })}
               </Text>
             </View>
           )}
+
+          {/* Prompt chips */}
+          <View style={styles.chipsContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipsScroll}
+            >
+              {CHIP_KEYS.map((key) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[
+                    styles.chip,
+                    newMessage === t(key) && styles.chipActive,
+                  ]}
+                  onPress={() => handleChipPress(key)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.chipText, newMessage === t(key) && styles.chipTextActive]}>
+                    {t(key)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
           <View style={styles.anonymousToggle}>
-            <Text style={styles.anonymousLabel}>Anonym senden</Text>
+            <Text style={styles.anonymousLabel}>{t('contact.anonymousLabel')}</Text>
             <Switch
               value={isAnonymous}
               onValueChange={(v) => {
@@ -251,7 +287,7 @@ export default function ContactDetailScreen() {
           <View style={styles.inputRow}>
             <TextInput
               style={styles.input}
-              placeholder="Warum schätzt du diesen Menschen?"
+              placeholder={t('contact.placeholder')}
               placeholderTextColor="#999"
               value={newMessage}
               onChangeText={setNewMessage}
@@ -343,8 +379,37 @@ const styles = StyleSheet.create({
   composeArea: {
     borderTopWidth: 1,
     borderTopColor: '#eee',
-    paddingTop: 12,
+    paddingTop: 10,
     paddingHorizontal: 12,
+  },
+  chipsContainer: {
+    marginBottom: 8,
+    backgroundColor: 'transparent',
+  },
+  chipsScroll: {
+    gap: 8,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#e0e0e0',
+    backgroundColor: '#fafafa',
+  },
+  chipActive: {
+    borderColor: '#e74c8b',
+    backgroundColor: '#fff0f5',
+  },
+  chipText: {
+    fontSize: 13,
+    color: '#888',
+  },
+  chipTextActive: {
+    color: '#e74c8b',
+    fontWeight: '600',
   },
   anonymousToggle: {
     flexDirection: 'row',
