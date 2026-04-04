@@ -176,7 +176,7 @@ export default function ContactDetailScreen() {
   }
 
   function handleChipPress(chipKey: string) {
-    const chipText = t(chipKey);
+    const chipText = t(chipKey).replace(/\.\.\.$/u, '') + ' ';
     setNewMessage(chipText);
   }
 
@@ -259,12 +259,12 @@ export default function ContactDetailScreen() {
                   key={key}
                   style={[
                     styles.chip,
-                    newMessage === t(key) && styles.chipActive,
+                    newMessage === t(key).replace(/\.\.\.$/u, '') + ' ' && styles.chipActive,
                   ]}
                   onPress={() => handleChipPress(key)}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.chipText, newMessage === t(key) && styles.chipTextActive]}>
+                  <Text style={[styles.chipText, newMessage === t(key).replace(/\.\.\.$/u, '') + ' ' && styles.chipTextActive]}>
                     {t(key)}
                   </Text>
                 </TouchableOpacity>
