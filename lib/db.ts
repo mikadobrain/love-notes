@@ -2,17 +2,25 @@ import * as SQLite from 'expo-sqlite';
 import { Logger } from './logger';
 
 let db: SQLite.SQLiteDatabase | null = null;
+let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 /**
  * Get or create the local SQLite database connection.
+ * Uses a promise singleton to prevent race conditions when called concurrently.
  */
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db;
-  Logger.debug('db', 'Opening SQLite database...');
-  db = await SQLite.openDatabaseAsync('lovenotes.db');
-  await initializeDatabase(db);
-  Logger.debug('db', 'Database ready');
-  return db;
+  if (!dbInitPromise) {
+    dbInitPromise = (async () => {
+      Logger.debug('db', 'Opening SQLite database...');
+      const database = await SQLite.openDatabaseAsync('lovenotes.db');
+      await initializeDatabase(database);
+      db = database;
+      Logger.debug('db', 'Database ready');
+      return database;
+    })();
+  }
+  return dbInitPromise;
 }
 
 /**
