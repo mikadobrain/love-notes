@@ -286,3 +286,14 @@ export async function setSetting(key: string, value: string): Promise<void> {
     [key, value]
   );
 }
+
+export async function clearLocalData(): Promise<void> {
+  Logger.info('db', 'clearLocalData: wiping all user data from local DB');
+  const database = await getDatabase();
+  await database.execAsync(`
+    DELETE FROM outgoing_notes;
+    DELETE FROM incoming_notes;
+    DELETE FROM connections_cache;
+  `);
+  Logger.info('db', 'clearLocalData: done');
+}

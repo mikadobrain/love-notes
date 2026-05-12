@@ -4,7 +4,7 @@ import * as Crypto from 'expo-crypto';
 import { supabase, Profile } from './supabase';
 import { generateAndStoreKeyPair, getPublicKey } from './crypto';
 import { Logger } from './logger';
-import { getSetting } from './db';
+import { getSetting, clearLocalData } from './db';
 import { syncConnections, fetchAndProcessMessages } from './sync';
 import { scheduleRandomNoteNotification } from './notifications';
 
@@ -304,6 +304,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signOut() {
     Logger.info('auth', 'signOut: user signing out');
     Logger.setUser(null);
+    await clearLocalData();
     await supabase.auth.signOut();
     setProfile(null);
     setSession(null);
