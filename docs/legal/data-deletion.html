@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Datenlöschung – LoveNotes</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; color: #333; }
+        h1 { color: #e91e63; }
+        h2 { color: #555; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+        a { color: #e91e63; }
+        .steps { background: #f9f9f9; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .steps ol { margin: 0; }
+        .steps li { margin-bottom: 12px; }
+        .lang-switch { text-align: right; margin-bottom: 20px; }
+        .en { display: none; }
+    </style>
+    <script>
+        function toggleLang() {
+            document.querySelectorAll('.de').forEach(el => el.style.display = el.style.display === 'none' ? '' : 'none');
+            document.querySelectorAll('.en').forEach(el => el.style.display = el.style.display === 'none' ? '' : 'none');
+        }
+    </script>
+</head>
+<body>
+    <div class="lang-switch"><button onclick="toggleLang()">English / Deutsch</button></div>
+
+    <!-- DEUTSCH -->
+    <div class="de">
+    <h1>Datenlöschung</h1>
+    <p><strong>LoveNotes</strong> – zuletzt aktualisiert: 12. Mai 2026</p>
+
+    <h2>So löschen Sie Ihr Konto und Ihre Daten</h2>
+
+    <h3>Option 1: In der App</h3>
+    <div class="steps">
+        <ol>
+            <li>Öffnen Sie die LoveNotes-App.</li>
+            <li>Gehen Sie zu <strong>Einstellungen</strong>.</li>
+            <li>Tippen Sie auf <strong>Konto löschen</strong>.</li>
+            <li>Bestätigen Sie die Löschung.</li>
+        </ol>
+    </div>
+
+    <h3>Option 2: Per E-Mail</h3>
+    <p>Senden Sie eine E-Mail an <a href="mailto:michael.mohr@wiit.cloud">michael.mohr@wiit.cloud</a> mit dem Betreff „Kontolöschung" und der E-Mail-Adresse, mit der Sie sich registriert haben. Wir bearbeiten Ihre Anfrage innerhalb von 7 Werktagen.</p>
+
+    <h2>Welche Daten werden gelöscht?</h2>
+    <p>Bei der Kontolöschung werden folgende Daten unwiderruflich entfernt:</p>
+    <ul>
+        <li>Ihr Benutzerkonto und Profildaten (Anzeigename, E-Mail-Hash, öffentlicher Schlüssel)</li>
+        <li>Alle Verbindungen zu anderen Nutzern</li>
+        <li>Alle noch nicht zugestellten Nachrichten in der Server-Warteschlange</li>
+        <li>App-Logs, die Ihrem Konto zugeordnet sind</li>
+    </ul>
+
+    <h2>Was wird nicht gelöscht?</h2>
+    <ul>
+        <li><strong>Bereits zugestellte Nachrichten</strong> auf den Geräten der Empfänger – diese liegen verschlüsselt in deren lokaler Datenbank und unterliegen deren Kontrolle.</li>
+        <li><strong>Lokale Daten auf Ihrem Gerät</strong> – deinstallieren Sie die App, um diese zu entfernen.</li>
+    </ul>
+
+    <h2>Bearbeitungsdauer</h2>
+    <p>Die Löschung über die App erfolgt sofort. E-Mail-Anfragen werden innerhalb von 7 Werktagen bearbeitet.</p>
+
+    <h2>Kontakt</h2>
+    <p>Bei Fragen zur Datenlöschung: <a href="mailto:michael.mohr@wiit.cloud">michael.mohr@wiit.cloud</a></p>
+    </div>
+
+    <!-- ENGLISH -->
+    <div class="en">
+    <h1>Data Deletion</h1>
+    <p><strong>LoveNotes</strong> – last updated: May 12, 2026</p>
+
+    <h2>How to Delete Your Account and Data</h2>
+
+    <h3>Option 1: In the App</h3>
+    <div class="steps">
+        <ol>
+            <li>Open the LoveNotes app.</li>
+            <li>Go to <strong>Settings</strong>.</li>
+            <li>Tap <strong>Delete Account</strong>.</li>
+            <li>Confirm the deletion.</li>
+        </ol>
+    </div>
+
+    <h3>Option 2: Via Email</h3>
+    <p>Send an email to <a href="mailto:michael.mohr@wiit.cloud">michael.mohr@wiit.cloud</a> with the subject "Account Deletion" and the email address you registered with. We will process your request within 7 business days.</p>
+
+    <h2>What Data Is Deleted?</h2>
+    <p>When your account is deleted, the following data is permanently removed:</p>
+    <ul>
+        <li>Your user account and profile data (display name, email hash, public key)</li>
+        <li>All connections to other users</li>
+        <li>All undelivered messages in the server queue</li>
+        <li>App logs associated with your account</li>
+    </ul>
+
+    <h2>What Is Not Deleted?</h2>
+    <ul>
+        <li><strong>Already delivered messages</strong> on recipients' devices — these are stored encrypted in their local database and are under their control.</li>
+        <li><strong>Local data on your device</strong> — uninstall the app to remove these.</li>
+    </ul>
+
+    <h2>Processing Time</h2>
+    <p>Deletion via the app is immediate. Email requests are processed within 7 business days.</p>
+
+    <h2>Contact</h2>
+    <p>For questions about data deletion: <a href="mailto:michael.mohr@wiit.cloud">michael.mohr@wiit.cloud</a></p>
+    </div>
+</body>
+</html>
