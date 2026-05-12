@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Datenschutzerklärung – LoveNotes</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; color: #333; }
+        h1 { color: #e91e63; }
+        h2 { color: #555; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+        a { color: #e91e63; }
+        .lang-switch { text-align: right; margin-bottom: 20px; }
+        .en { display: none; }
+    </style>
+    <script>
+        function toggleLang() {
+            document.querySelectorAll('.de').forEach(el => el.style.display = el.style.display === 'none' ? '' : 'none');
+            document.querySelectorAll('.en').forEach(el => el.style.display = el.style.display === 'none' ? '' : 'none');
+        }
+    </script>
+</head>
+<body>
+    <div class="lang-switch"><button onclick="toggleLang()">English / Deutsch</button></div>
+
+    <!-- DEUTSCH -->
+    <div class="de">
+    <h1>Datenschutzerklärung</h1>
+    <p><strong>LoveNotes</strong> – zuletzt aktualisiert: 12. Mai 2026</p>
+
+    <h2>1. Verantwortlicher</h2>
+    <p>Michael Mohr<br>
+    E-Mail: <a href="mailto:michael.mohr@wiit.cloud">michael.mohr@wiit.cloud</a></p>
+
+    <h2>2. Welche Daten wir erheben</h2>
+    <p>LoveNotes erhebt und verarbeitet folgende Daten:</p>
+    <ul>
+        <li><strong>Kontodaten:</strong> E-Mail-Adresse und selbstgewählter Anzeigename bei der Registrierung.</li>
+        <li><strong>Gehashte E-Mail-Adresse:</strong> Ein SHA-256-Hash Ihrer E-Mail wird gespeichert, damit andere Nutzer Sie finden können, ohne dass Ihre Klartext-E-Mail-Adresse offengelegt wird.</li>
+        <li><strong>Kryptografische Schlüssel:</strong> Ein öffentlicher Schlüssel (Curve25519) wird auf dem Server gespeichert. Der private Schlüssel verbleibt ausschließlich auf Ihrem Gerät.</li>
+        <li><strong>Nachrichten:</strong> Nachrichten werden Ende-zu-Ende-verschlüsselt (NaCl crypto_box) übertragen und gespeichert. Der Klartext ist nur für Sender und Empfänger lesbar.</li>
+        <li><strong>App-Logs:</strong> Fehler- und Warnmeldungen werden zur Fehlerbehebung an den Server übermittelt. Diese enthalten keine Nachrichteninhalte.</li>
+    </ul>
+
+    <h2>3. Zweck der Datenverarbeitung</h2>
+    <ul>
+        <li>Bereitstellung des Dienstes (Senden und Empfangen von Nachrichten)</li>
+        <li>Nutzer-Authentifizierung</li>
+        <li>Auffinden anderer Nutzer über gehashte E-Mail-Adressen</li>
+        <li>Fehlerbehebung und Verbesserung der App</li>
+    </ul>
+
+    <h2>4. Rechtsgrundlage</h2>
+    <p>Die Verarbeitung erfolgt auf Grundlage von Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung) und Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an der Fehlerbehebung).</p>
+
+    <h2>5. Datenweitergabe an Dritte</h2>
+    <p>Wir nutzen folgende Dienstleister:</p>
+    <ul>
+        <li><strong>Supabase Inc.</strong> (USA) – Backend-Infrastruktur, Datenbank und Authentifizierung. <a href="https://supabase.com/privacy" target="_blank">Datenschutzerklärung von Supabase</a>.</li>
+        <li><strong>Expo / EAS</strong> (USA) – Build-Dienst und Push-Benachrichtigungen. <a href="https://expo.dev/privacy" target="_blank">Datenschutzerklärung von Expo</a>.</li>
+    </ul>
+    <p>Die Übermittlung in die USA erfolgt auf Grundlage von Standardvertragsklauseln (Art. 46 Abs. 2 lit. c DSGVO).</p>
+
+    <h2>6. Speicherdauer</h2>
+    <p>Kontodaten werden gespeichert, solange Ihr Konto besteht. Zugestellte Nachrichten werden aus der Server-Warteschlange gelöscht, sobald sie vom Empfänger abgerufen wurden, und lokal auf dem Gerät gespeichert. Bei Kontolöschung werden alle serverseitigen Daten entfernt.</p>
+
+    <h2>7. Ihre Rechte</h2>
+    <p>Sie haben das Recht auf:</p>
+    <ul>
+        <li>Auskunft über Ihre gespeicherten Daten (Art. 15 DSGVO)</li>
+        <li>Berichtigung unrichtiger Daten (Art. 16 DSGVO)</li>
+        <li>Löschung Ihrer Daten (Art. 17 DSGVO)</li>
+        <li>Einschränkung der Verarbeitung (Art. 18 DSGVO)</li>
+        <li>Datenübertragbarkeit (Art. 20 DSGVO)</li>
+        <li>Widerspruch gegen die Verarbeitung (Art. 21 DSGVO)</li>
+        <li>Beschwerde bei einer Aufsichtsbehörde</li>
+    </ul>
+
+    <h2>8. Datenlöschung</h2>
+    <p>Sie können Ihr Konto und alle zugehörigen Daten jederzeit löschen. Weitere Informationen finden Sie auf unserer <a href="data-deletion.html">Seite zur Datenlöschung</a>.</p>
+
+    <h2>9. Sicherheit</h2>
+    <p>Alle Nachrichten sind Ende-zu-Ende-verschlüsselt. Der private Schlüssel verlässt niemals Ihr Gerät. Die Kommunikation mit dem Server erfolgt ausschließlich über HTTPS/TLS.</p>
+
+    <h2>10. Änderungen</h2>
+    <p>Wir behalten uns vor, diese Datenschutzerklärung anzupassen. Die aktuelle Version ist stets unter dieser URL abrufbar.</p>
+
+    <h2>11. Kontakt</h2>
+    <p>Bei Fragen zum Datenschutz wenden Sie sich an: <a href="mailto:michael.mohr@wiit.cloud">michael.mohr@wiit.cloud</a></p>
+    </div>
+
+    <!-- ENGLISH -->
+    <div class="en">
+    <h1>Privacy Policy</h1>
+    <p><strong>LoveNotes</strong> – last updated: May 12, 2026</p>
+
+    <h2>1. Data Controller</h2>
+    <p>Michael Mohr<br>
+    Email: <a href="mailto:michael.mohr@wiit.cloud">michael.mohr@wiit.cloud</a></p>
+
+    <h2>2. Data We Collect</h2>
+    <p>LoveNotes collects and processes the following data:</p>
+    <ul>
+        <li><strong>Account data:</strong> Email address and chosen display name upon registration.</li>
+        <li><strong>Hashed email address:</strong> A SHA-256 hash of your email is stored so other users can find you without exposing your plain-text email.</li>
+        <li><strong>Cryptographic keys:</strong> A public key (Curve25519) is stored on the server. Your private key remains exclusively on your device.</li>
+        <li><strong>Messages:</strong> Messages are transmitted and stored with end-to-end encryption (NaCl crypto_box). Only sender and recipient can read the plaintext.</li>
+        <li><strong>App logs:</strong> Error and warning messages are sent to the server for debugging. These do not contain message content.</li>
+    </ul>
+
+    <h2>3. Purpose of Data Processing</h2>
+    <ul>
+        <li>Providing the service (sending and receiving messages)</li>
+        <li>User authentication</li>
+        <li>Finding other users via hashed email addresses</li>
+        <li>Debugging and improving the app</li>
+    </ul>
+
+    <h2>4. Legal Basis</h2>
+    <p>Processing is based on Art. 6(1)(b) GDPR (contract performance) and Art. 6(1)(f) GDPR (legitimate interest in debugging).</p>
+
+    <h2>5. Third-Party Services</h2>
+    <ul>
+        <li><strong>Supabase Inc.</strong> (USA) – Backend infrastructure, database, and authentication. <a href="https://supabase.com/privacy" target="_blank">Supabase Privacy Policy</a>.</li>
+        <li><strong>Expo / EAS</strong> (USA) – Build service and push notifications. <a href="https://expo.dev/privacy" target="_blank">Expo Privacy Policy</a>.</li>
+    </ul>
+    <p>Data transfers to the USA are based on Standard Contractual Clauses (Art. 46(2)(c) GDPR).</p>
+
+    <h2>6. Data Retention</h2>
+    <p>Account data is retained as long as your account exists. Delivered messages are removed from the server queue once retrieved by the recipient and stored locally on the device. All server-side data is deleted upon account deletion.</p>
+
+    <h2>7. Your Rights</h2>
+    <ul>
+        <li>Access to your stored data (Art. 15 GDPR)</li>
+        <li>Rectification of inaccurate data (Art. 16 GDPR)</li>
+        <li>Erasure of your data (Art. 17 GDPR)</li>
+        <li>Restriction of processing (Art. 18 GDPR)</li>
+        <li>Data portability (Art. 20 GDPR)</li>
+        <li>Objection to processing (Art. 21 GDPR)</li>
+        <li>Lodging a complaint with a supervisory authority</li>
+    </ul>
+
+    <h2>8. Data Deletion</h2>
+    <p>You can delete your account and all associated data at any time. See our <a href="data-deletion.html">data deletion page</a> for details.</p>
+
+    <h2>9. Security</h2>
+    <p>All messages are end-to-end encrypted. Your private key never leaves your device. All server communication uses HTTPS/TLS.</p>
+
+    <h2>10. Changes</h2>
+    <p>We reserve the right to update this privacy policy. The current version is always available at this URL.</p>
+
+    <h2>11. Contact</h2>
+    <p>For privacy questions, contact: <a href="mailto:michael.mohr@wiit.cloud">michael.mohr@wiit.cloud</a></p>
+    </div>
+</body>
+</html>
