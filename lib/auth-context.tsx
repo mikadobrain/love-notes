@@ -288,7 +288,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     Logger.debug('auth', 'backgroundStartupSync: start', { userId });
     try {
       await syncConnections(userId, displayName);
-      const newCount = await fetchAndProcessMessages();
+      const newCount = await fetchAndProcessMessages(userId);
       Logger.info('auth', 'backgroundStartupSync: done', { newMessages: newCount });
       if (newCount > 0) {
         await scheduleRandomNoteNotification();

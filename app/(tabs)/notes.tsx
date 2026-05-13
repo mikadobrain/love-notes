@@ -60,7 +60,7 @@ export default function NotesScreen() {
       }
 
       Logger.debug('notes', 'handleRefresh: fetching messages from queue...');
-      const processed = await fetchAndProcessMessages();
+      const processed = await fetchAndProcessMessages(user?.id);
       Logger.info('notes', 'handleRefresh: done', { newMessages: processed });
 
       await loadNotes();

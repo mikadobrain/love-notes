@@ -142,8 +142,8 @@ export async function sendNote(
  * Fetch and process pending messages from the message queue.
  * Decrypts each message and stores it locally.
  */
-export async function fetchAndProcessMessages(): Promise<number> {
-  Logger.debug('sync', 'fetchAndProcessMessages: start');
+export async function fetchAndProcessMessages(userId?: string): Promise<number> {
+  Logger.debug('sync', 'fetchAndProcessMessages: start', { userId });
 
   const keyPair = await getKeyPair();
   if (!keyPair) {
@@ -153,11 +153,17 @@ export async function fetchAndProcessMessages(): Promise<number> {
   Logger.debug('sync', 'fetchAndProcessMessages: key pair available');
 
   Logger.debug('sync', 'fetchAndProcessMessages: querying message_queue...');
-  const { data: messages, error } = await supabase
+  let query = supabase
     .from('message_queue')
     .select('*')
     .eq('delivered', false)
     .order('created_at', { ascending: true });
+
+  if (userId) {
+    query = query.eq('recipient_id', userId);
+  }
+
+  const { data: messages, error } = await query;
 
   if (error) {
     Logger.error('sync', 'fetchAndProcessMessages: fetch failed', { error: error.message });
@@ -196,9 +202,12 @@ export async function fetchAndProcessMessages(): Promise<number> {
         processedCount++;
         Logger.info('sync', 'fetchAndProcessMessages: message processed and stored', { id: msg.id });
       } else {
-        Logger.warn('sync', 'fetchAndProcessMessages: could not decrypt message (no matching key)', {
+        Logger.warn('sync', 'fetchAndProcessMessages: could not decrypt message, deleting stale entry', {
           id: msg.id,
         });
+        // Message is undecryptable (key mismatch from deleted/recreated account).
+        // Remove it so it doesn't block the queue on every sync.
+        await supabase.from('message_queue').delete().eq('id', msg.id);
       }
     } catch (err) {
       Logger.error('sync', 'fetchAndProcessMessages: error processing message', {
