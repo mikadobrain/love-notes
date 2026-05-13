@@ -14,6 +14,13 @@ import { configureNotifications, registerForPushNotifications, savePushToken } f
 import { I18nProvider } from '@/lib/i18n';
 import { Logger } from '@/lib/logger';
 
+let Notifications: typeof import('expo-notifications') | null = null;
+try {
+  Notifications = require('expo-notifications');
+} catch {
+  // expo-notifications not available
+}
+
 export {
   // Catch any errors thrown by the Layout component.
   ErrorBoundary,
@@ -91,6 +98,22 @@ function RootLayoutNav() {
       }
     })();
   }, [session, user]);
+
+  // Handle notification taps — navigate to the relevant screen
+  useEffect(() => {
+    if (!Notifications || !session) return;
+
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data;
+      Logger.debug('notifications', 'Notification tapped', { data });
+
+      if (data?.screen === 'requests') {
+        router.push('/requests');
+      }
+    });
+
+    return () => subscription.remove();
+  }, [session, router]);
 
   // Redirect based on auth state
   useEffect(() => {
