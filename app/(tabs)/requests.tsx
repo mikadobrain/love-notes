@@ -16,6 +16,7 @@ import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth-context';
 import { supabase, Connection } from '@/lib/supabase';
 import { Logger } from '@/lib/logger';
+import { syncConnections } from '@/lib/sync';
 import { useI18n } from '@/lib/i18n';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
@@ -109,6 +110,14 @@ export default function RequestsScreen() {
     } else {
       Logger.info('requests', 'handleAccept: accepted', { connectionId });
       await loadRequests();
+      // Sync connections cache so the contact list updates immediately
+      if (user) {
+        syncConnections(user.id, undefined).catch((err) =>
+          Logger.error('requests', 'handleAccept: syncConnections failed', {
+            error: err instanceof Error ? err.message : String(err),
+          })
+        );
+      }
     }
   }
 

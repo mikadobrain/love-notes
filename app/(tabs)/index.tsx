@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   StyleSheet,
   FlatList,
@@ -7,6 +7,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/lib/auth-context';
 import { getAcceptedConnections, CachedConnection } from '@/lib/db';
@@ -55,20 +56,22 @@ export default function ContactsScreen() {
     }
   }, [user, profile, loadConnections]);
 
-  useEffect(() => {
-    Logger.debug('contacts', 'ContactsScreen mounted, userId:', { userId: user?.id });
-    loadConnections();
-    if (user) {
-      Logger.debug('contacts', 'starting background syncConnections...');
-      syncConnections(user.id, profile?.display_name)
-        .then(loadConnections)
-        .catch((err) =>
-          Logger.error('contacts', 'background syncConnections failed', {
-            error: err instanceof Error ? err.message : String(err),
-          })
-        );
-    }
-  }, [user, profile]);
+  useFocusEffect(
+    useCallback(() => {
+      Logger.debug('contacts', 'ContactsScreen focused, userId:', { userId: user?.id });
+      loadConnections();
+      if (user) {
+        Logger.debug('contacts', 'starting background syncConnections...');
+        syncConnections(user.id, profile?.display_name)
+          .then(loadConnections)
+          .catch((err) =>
+            Logger.error('contacts', 'background syncConnections failed', {
+              error: err instanceof Error ? err.message : String(err),
+            })
+          );
+      }
+    }, [user, profile])
+  );
 
   if (isLoading) {
     return (
