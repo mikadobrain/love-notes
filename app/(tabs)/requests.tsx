@@ -31,7 +31,7 @@ type FoundProfile = {
 };
 
 export default function RequestsScreen() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { t } = useI18n();
   const [incoming, setIncoming] = useState<ConnectionRequest[]>([]);
   const [outgoing, setOutgoing] = useState<ConnectionRequest[]>([]);
@@ -254,6 +254,22 @@ export default function RequestsScreen() {
           targetId: foundProfile.id,
           targetName: foundProfile.display_name,
         });
+
+        // Send push notification to the recipient
+        const senderName = profile?.display_name ?? 'Jemand';
+        supabase.functions.invoke('send-push', {
+          body: {
+            recipient_id: foundProfile.id,
+            title: 'Neue Kontaktanfrage 💌',
+            body: `${senderName} möchte sich mit dir verbinden.`,
+            data: { type: 'connection_request', screen: 'requests' },
+          },
+        }).catch((err) =>
+          Logger.error('requests', 'handleSendRequest: push notification failed', {
+            error: err instanceof Error ? err.message : String(err),
+          })
+        );
+
         Alert.alert(t('requests.sent'), t('requests.sentMessage', { name: foundProfile.display_name }));
         setFoundProfile(null);
         setSearchEmail('');
